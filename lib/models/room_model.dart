@@ -1,0 +1,123 @@
+import 'package:vector_math/vector_math_64.dart' as vector;
+
+enum RoomType { living, cocina, bano, dormitorio, lavadero, pasillo }
+enum FeatureType { door, window }
+
+/// Punto en el espacio 3D (x, y, z) – sin timestamp para simplificar
+class ARPoint {
+  final double x;
+  final double y;
+  final double z;
+
+  ARPoint({required this.x, required this.y, required this.z});
+
+  factory ARPoint.fromVector3(vector.Vector3 v) {
+    return ARPoint(x: v.x, y: v.y, z: v.z);
+  }
+
+  Map<String, dynamic> toJson() => {
+        'x': x,
+        'y': y,
+        'z': z,
+      };
+
+  factory ARPoint.fromJson(Map<String, dynamic> json) => ARPoint(
+        x: (json['x'] as num).toDouble(),
+        y: (json['y'] as num).toDouble(),
+        z: (json['z'] as num).toDouble(),
+      );
+}
+
+/// Representa una puerta o ventana sobre una pared (definida por dos puntos)
+class WallFeature {
+  final String id;
+  final FeatureType type;
+  final ARPoint start;
+  final ARPoint end;
+
+  WallFeature({
+    required this.id,
+    required this.type,
+    required this.start,
+    required this.end,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'type': type.name,
+        'start': start.toJson(),
+        'end': end.toJson(),
+      };
+
+  factory WallFeature.fromJson(Map<String, dynamic> json) => WallFeature(
+        id: json['id'] as String,
+        type: FeatureType.values.firstWhere(
+            (e) => e.name == json['type']),
+        start: ARPoint.fromJson(json['start'] as Map<String, dynamic>),
+        end: ARPoint.fromJson(json['end'] as Map<String, dynamic>),
+      );
+}
+
+/// Habitación con sus puntos (contorno) y elementos (puertas/ventanas)
+class RoomModel {
+  final String id;
+  final String name;
+  final RoomType type;
+  final List<ARPoint> points;
+  final List<WallFeature> features; // <-- NUEVO
+  final bool isClosed;
+
+  RoomModel({
+    required this.id,
+    required this.name,
+    required this.type,
+    required this.points,
+    this.features = const [],
+    this.isClosed = false,
+  });
+
+  RoomModel copyWith({
+    String? id,
+    String? name,
+    RoomType? type,
+    List<ARPoint>? points,
+    List<WallFeature>? features,
+    bool? isClosed,
+  }) {
+    return RoomModel(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      type: type ?? this.type,
+      points: points ?? this.points,
+      features: features ?? this.features,
+      isClosed: isClosed ?? this.isClosed,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        'type': type.name,
+        'points': points.map((p) => p.toJson()).toList(),
+        'features': features.map((f) => f.toJson()).toList(),
+        'isClosed': isClosed,
+      };
+
+  factory RoomModel.fromJson(Map<String, dynamic> json) => RoomModel(
+        id: json['id'] as String,
+        name: json['name'] as String,
+        type: RoomType.values.firstWhere(
+          (e) => e.name == json['type'],
+          orElse: () => RoomType.living,
+        ),
+        points: (json['points'] as List)
+            .map((p) => ARPoint.fromJson(p as Map<String, dynamic>))
+            .toList(),
+        features: json['features'] != null
+            ? (json['features'] as List)
+                .map((f) => WallFeature.fromJson(f as Map<String, dynamic>))
+                .toList()
+            : [],
+        isClosed: json['isClosed'] as bool? ?? false,
+      );
+}

@@ -1,0 +1,82 @@
+buildscript {
+    ext.kotlin_version = '1.8.22'
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath "com.android.tools.build:gradle:8.2.1"
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
+    }
+}
+
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+rootProject.buildDir = '../build'
+
+subprojects {
+    project.buildDir = "${rootProject.buildDir}/${project.name}"
+}
+
+// 1. Forzar Kotlin 1.8.22 en todas las dependencias
+subprojects { subproject ->
+    subproject.buildscript {
+        repositories {
+            google()
+            mavenCentral()
+        }
+        configurations.configureEach {
+            resolutionStrategy {
+                force "org.jetbrains.kotlin:kotlin-gradle-plugin:$rootProject.ext.kotlin_version"
+            }
+        }
+    }
+
+    subproject.configurations.configureEach {
+        resolutionStrategy {
+            force "org.jetbrains.kotlin:kotlin-stdlib:$rootProject.ext.kotlin_version"
+            force "org.jetbrains.kotlin:kotlin-stdlib-jdk7:$rootProject.ext.kotlin_version"
+            force "org.jetbrains.kotlin:kotlin-stdlib-jdk8:$rootProject.ext.kotlin_version"
+            force "org.jetbrains.kotlin:kotlin-stdlib-common:$rootProject.ext.kotlin_version"
+        }
+    }
+}
+
+// 2. FORZAR COMPILE SDK 34, NAMESPACE Y JAVA 17 EN TODOS LOS MÓDULOS DE TERCEROS
+subprojects { subproject ->
+    subproject.afterEvaluate { proj ->
+        if (proj.hasProperty('android')) {
+            proj.android {
+                compileSdkVersion 34
+
+                if (namespace == null) {
+                    namespace = proj.group ?: "com.example.${proj.name}"
+                }
+
+                compileOptions {
+                    sourceCompatibility JavaVersion.VERSION_17
+                    targetCompatibility JavaVersion.VERSION_17
+                }
+            }
+        }
+    }
+
+    subproject.tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+        kotlinOptions {
+            jvmTarget = "17"
+        }
+    }
+}
+
+subprojects {
+    project.evaluationDependsOn(':app')
+}
+
+tasks.register("clean", Delete) {
+    delete rootProject.buildDir
+}

@@ -1,0 +1,59 @@
+name: room_scanner_ar
+description: "Aplicación de escaneo de habitaciones en Realidad Aumentada y generación de planos 2D."
+publish_to: 'none'
+version: 2.5.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+  flutter: ">=3.16.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Módulo AR
+  ar_flutter_plugin_2: ^0.0.3
+
+  # Matemáticas vectoriales para los nodos 3D
+  vector_math: ^2.1.4
+
+  # Gestión de estado
+  provider: ^6.1.2
+
+  # Selector de archivos (Importación JSON)
+  file_picker: ^8.0.0
+
+  # Generación, impresión y exportación de Planos PDF
+  pdf: ^3.10.8
+  printing: ^5.13.1
+  share_plus: ^10.0.0
+  path_provider: ^2.1.2
+
+  # Base de Datos Local NoSQL (Fase 1 - Persistencia)
+  isar: ^3.1.0+1
+  isar_flutter_libs: ^3.1.0+1
+
+  # Nube, Autenticación y Sincronización (Fase 2)
+  supabase_flutter: ^2.3.4
+
+  # Permisos (cámara/ubicación en tiempo de ejecución)
+  permission_handler: ^11.3.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+  integration_test:
+    sdk: flutter
+
+  # Generador de código para Isar DB
+  build_runner: ^2.4.8
+  isar_generator: ^3.1.0+1
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    # Modelos e imágenes en assets/models/
+    - assets/models/sphere.gltf
+    - assets/models/images.png

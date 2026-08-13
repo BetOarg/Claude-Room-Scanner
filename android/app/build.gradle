@@ -1,0 +1,87 @@
+plugins {
+    id "com.android.application"
+    id "kotlin-android"
+    id "dev.flutter.flutter-gradle-plugin"
+}
+
+// Carga segura de variables desde local.properties o valores por defecto
+def localProperties = new Properties()
+def localPropertiesFile = rootProject.file('local.properties')
+if (localPropertiesFile.exists()) {
+    localPropertiesFile.withReader('UTF-8') { reader ->
+        localProperties.load(reader)
+    }
+}
+
+def flutterVersionCode = localProperties.getProperty('flutter.versionCode') ?: '1'
+def flutterVersionName = localProperties.getProperty('flutter.versionName') ?: '1.0'
+
+// Firma de release: si existe android/key.properties (no versionado, con un
+// keystore real) se usa para firmar el build de release. Si no existe, el
+// build cae de nuevo en la clave de debug para no romper `flutter build apk
+// --release` en desarrollo local.
+def keystoreProperties = new Properties()
+def keystorePropertiesFile = rootProject.file('key.properties')
+def hasReleaseKeystore = keystorePropertiesFile.exists()
+if (hasReleaseKeystore) {
+    keystorePropertiesFile.withReader('UTF-8') { reader ->
+        keystoreProperties.load(reader)
+    }
+}
+
+android {
+    namespace "com.tuempresa.room_scanner_ar"
+    compileSdkVersion 34
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = '17'
+    }
+
+    defaultConfig {
+        applicationId "com.tuempresa.room_scanner_ar"
+        minSdkVersion 28 // <--- CAMBIADO DE 24 A 28
+        targetSdkVersion 34
+        versionCode flutterVersionCode.toInteger()
+        versionName flutterVersionName
+    }
+
+    signingConfigs {
+        if (hasReleaseKeystore) {
+            release {
+                keyAlias keystoreProperties['keyAlias']
+                keyPassword keystoreProperties['keyPassword']
+                storeFile keystoreProperties['storeFile'] ? file(keystoreProperties['storeFile']) : null
+                storePassword keystoreProperties['storePassword']
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            // ADVERTENCIA: sin android/key.properties con un keystore real,
+            // este build de "release" queda firmado con la clave de DEBUG.
+            // Sirve para probar `flutter build apk --release` localmente,
+            // pero NO se puede publicar en Play Store ni distribuir a
+            // usuarios así. Antes de publicar, generá un keystore y un
+            // android/key.properties (ver la guía oficial de Flutter
+            // "Build and release an Android app").
+            signingConfig hasReleaseKeystore ? signingConfigs.release : signingConfigs.debug
+            minifyEnabled false
+            shrinkResources false
+        }
+    }
+}
+
+flutter {
+    source '../../'
+}
+
+dependencies {
+    // Proporciona a AAPT los temas base AppCompat
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+}
