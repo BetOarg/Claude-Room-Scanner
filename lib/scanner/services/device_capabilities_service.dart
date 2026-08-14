@@ -1,45 +1,95 @@
 import 'dart:io';
 
-import 'package:ar_flutter_plugin_2/ar_flutter_plugin.dart';
+import 'package:camera/camera.dart';
+import 'package:flutter/services.dart';
 
 import '../engine/scanner_capabilities.dart';
 
-/// Detecta las capacidades relevantes del dispositivo.
+/// Detecta las capacidades reales del dispositivo.
 ///
-/// AR es una capacidad opcional. La ausencia de ARCore/ARKit nunca debe
-/// impedir que la aplicación funcione en modo Basic o Manual.
+/// La detección de ARCore/ARKit se realiza mediante código nativo porque
+/// ar_flutter_plugin_2 0.0.3 no expone un getter Dart para comprobar
+/// disponibilidad de ARCore.
+///
+/// La ausencia de AR nunca debe impedir el funcionamiento del scanner
+/// Basic o Manual.
 class DeviceCapabilitiesService {
   DeviceCapabilitiesService._();
 
-  static Future<ScannerCapabilities> detect() async {
-    bool hasArCore = false;
-    bool hasArKit = false;
+  static const MethodChannel _channel = MethodChannel(
+    'com.betOarg.room_scanner_ar/device_capabilities',
+  );
 
-    try {
-      if (Platform.isAndroid) {
-        hasArCore = await ArFlutterPlugin.isArCoreSupported;
-      } else if (Platform.isIOS) {
-        // ar_flutter_plugin_2 no expone aquí una comprobación ARKit
-        // equivalente de forma multiplataforma.
-        //
-        // Se deja false hasta implementar el detector nativo iOS.
-        hasArKit = false;
-      }
-    } catch (_) {
-      // AR es opcional.
-      //
-      // Si la consulta falla, NO debemos impedir el uso de Basic Scanner.
-      hasArCore = false;
-      hasArKit = false;
-    }
+  /// Detecta las capacidades del dispositivo.
+  static Future<ScannerCapabilities> detect() async {
+    final hasCamera = await _hasCamera();
+
+    final hasArCore = await _hasArCore();
+
+    final hasArKit = await _hasArKit();
 
     return ScannerCapabilities(
-      hasCamera: true,
+      hasCamera: hasCamera,
       hasArCore: hasArCore,
       hasArKit: hasArKit,
+
+      // Se detectarán posteriormente mediante ScannerSensorService.
       hasGyroscope: false,
       hasAccelerometer: false,
       hasMagnetometer: false,
     );
+  }
+
+  /// Comprueba si existe al menos una cámara disponible.
+  static Future<bool> _hasCamera() async {
+    try {
+      final cameras = await availableCameras();
+
+      return cameras.isNotEmpty;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Comprueba ARCore mediante Android nativo.
+  static Future<bool> _hasArCore() async {
+    if (!Platform.isAndroid) {
+      return false;
+    }
+
+    try {
+      final result = await _channel.invokeMethod<bool>(
+        'isARCoreSupported',
+      );
+
+      return result ?? false;
+    } on MissingPluginException {
+      return false;
+    } on PlatformException {
+      return false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Comprueba ARKit mediante iOS nativo.
+  static Future<bool> _hasArKit() async {
+    if (!Platform.isIOS) {
+      return false;
+    }
+
+    try {
+      final result = await _channel.invokeMethod<bool>(
+        'isARKitSupported',
+      );
+
+      return result ?? false;
+    } on MissingPluginException {
+      return false;
+    } on PlatformException {
+      return false;
+    } catch (_) {
+      return false;
+    }
   }
 }
