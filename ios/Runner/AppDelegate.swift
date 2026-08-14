@@ -1,3 +1,4 @@
+import ARKit
 import UIKit
 import Flutter
 
@@ -20,7 +21,32 @@ import Flutter
     // (RoomPlanService.isSupported/startScanning/stopScanning) fallaba
     // silenciosamente con MissingPluginException, incluso en un iPhone con
     // LiDAR compatible.
-    if let controller = window?.rootViewController as? FlutterViewController {
+    if let controller = window?.rootViewController as? FlutterViewController { let deviceCapabilitiesChannel = FlutterMethodChannel(
+  name: "com.betOarg.room_scanner_ar/device_capabilities",
+  binaryMessenger: controller.binaryMessenger
+)
+
+deviceCapabilitiesChannel.setMethodCallHandler { call, result in
+
+  switch call.method {
+
+  case "isARKitSupported":
+
+    if #available(iOS 11.0, *) {
+      result(ARWorldTrackingConfiguration.isSupported)
+    } else {
+      result(false)
+    }
+
+  case "isARCoreSupported":
+
+    result(false)
+
+  default:
+
+    result(FlutterMethodNotImplemented)
+  }
+}
       let roomPlanChannel = FlutterMethodChannel(
         name: "com.example.roomplan",
         binaryMessenger: controller.binaryMessenger
