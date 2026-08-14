@@ -13,8 +13,8 @@ import '../models/room_model.dart';
 import '../providers/floor_plan_provider.dart';
 import '../providers/scanner_provider.dart';
 import '../services/permission_service.dart';
-import '../utils/ar_stability_filter.dart';
 import '../utils/scan_validator.dart';
+import '../scanner/adapters/ar_scanner_adapter.dart';
 import 'floor_plan_viewer_screen.dart';
 
 enum AppMode {
@@ -24,11 +24,9 @@ enum AppMode {
 }
 
 class ARScannerScreen extends StatefulWidget {
-  /// UUID del proyecto Isar al que pertenece este escaneo. Se usa para
-  /// persistir cada habitación cerrada de inmediato (antes las
-  /// habitaciones cerradas solo vivían en memoria dentro de
-  /// `ScannerProvider` y se perdían en cuanto se salía de esta pantalla).
+  /// UUID del proyecto Isar al que pertenece este escaneo.
   final String projectUuid;
+
   final String projectName;
 
   const ARScannerScreen({
@@ -44,20 +42,32 @@ class ARScannerScreen extends StatefulWidget {
 class _ARScannerScreenState extends State<ARScannerScreen> {
   AppMode _currentMode = AppMode.wall;
 
-  // Controladores del Plugin AR.
+  // ================================================================
+  // CONTROLADORES AR
+  // ================================================================
+
   ARSessionManager? _arSessionManager;
   ARObjectManager? _arObjectManager;
+
+  // ================================================================
+  // SCANNER ENGINE
+  // ================================================================
+
+  /// Adapter responsable de encapsular la interacción con ARCore/ARKit.
+  ///
+  /// La pantalla no obtiene directamente la pose de la cámara.
+  /// Eso ahora pertenece al Scanner Engine.
+  final ARScannerAdapter _arScannerAdapter = ARScannerAdapter();
 
   // Posición actual estimada del dispositivo/cámara.
   vector.Vector3 _currentCameraPosition = vector.Vector3(0, 0, 0);
 
-  // Suaviza el ruido de la pose de la cámara (media móvil exponencial) para
-  // que los vértices capturados no salten con cada micro-temblor del
-  // tracking.
-  final ARStabilityFilter _stabilityFilter = ARStabilityFilter();
-
   bool _permissionsGranted = false;
   bool _checkingPermissions = true;
+
+  // ================================================================
+  // CICLO DE VIDA
+  // ================================================================
 
   @override
   void initState() {
@@ -66,11 +76,10 @@ class _ARScannerScreenState extends State<ARScannerScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
 
-      // Antes nadie llamaba a PermissionService: la app dependía de que el
-      // plugin de AR pidiera los permisos por su cuenta, lo que en Android
-      // puede dejar la cámara en negro sin ningún mensaje si el permiso
-      // fue denegado previamente.
-      final granted = await PermissionService.requestScannerPermissions();
+      // Permisos del modo AR actual.
+      final granted =
+          await PermissionService.requestScannerPermissions();
+
       if (!mounted) return;
 
       setState(() {
@@ -88,19 +97,29 @@ class _ARScannerScreenState extends State<ARScannerScreen> {
             duration: Duration(seconds: 4),
           ),
         );
+
         return;
       }
 
       if (!mounted) return;
+
       context.read<ScannerProvider>().startNewRoom();
     });
   }
 
   @override
   void dispose() {
-    _arSessionManager?.dispose();
+    _arScannerAdapter.dispose();
+
+    _arSessionManager = null;
+    _arObjectManager = null;
+
     super.dispose();
   }
+
+  // ================================================================
+  // AR VIEW
+  // ================================================================
 
   void _onARViewCreated(
     ARSessionManager arSessionManager,
@@ -111,40 +130,41 @@ class _ARScannerScreenState extends State<ARScannerScreen> {
     _arSessionManager = arSessionManager;
     _arObjectManager = arObjectManager;
 
-    _arSessionManager!.onInitialize(
-      showFeaturePoints: false,
-      showPlanes: true,
-      customPlaneTexturePath: null,
-      showWorldOrigin: false,
-      handleTaps: false,
+    _arScannerAdapter.attachARSession(
+      sessionManager: arSessionManager,
+      objectManager: arObjectManager,
     );
 
-    _arObjectManager!.onInitialize();
-
-    // Notificar al Provider que la vista AR está activa
-    // y que comenzó la inicialización del tracking.
     if (mounted) {
       context.read<ScannerProvider>().updateTrackingStatus(true);
     }
   }
 
-  /// Obtiene la posición 3D actual de la cámara, ya suavizada por
-  /// [ARStabilityFilter]. Devuelve `null` si el tracking todavía no entregó
-  /// ninguna pose válida — en ese caso NO hay que capturar un punto con una
-  /// posición inventada (antes se usaba silenciosamente Vector3(0,0,-1) o la
-  /// última posición conocida, generando esquinas incorrectas sin avisar).
+  // ================================================================
+  // POSICIÓN DE CÁMARA
+  // ================================================================
+
   Future<vector.Vector3?> _getCurrentCameraPosition() async {
-    if (_arSessionManager == null) return null;
+    final point = await _arScannerAdapter.capturePoint();
 
-    final pose = await _arSessionManager!.getCameraPose();
-    if (pose == null) return null;
+    if (point == null) {
+      return null;
+    }
 
-    final translation = pose.getTranslation();
-    _currentCameraPosition = translation;
+    final position = vector.Vector3(
+      point.x,
+      point.y,
+      point.z,
+    );
 
-    final smoothed = _stabilityFilter.filter(translation) ?? translation;
-    return smoothed;
+    _currentCameraPosition = position;
+
+    return position;
   }
+
+  // ================================================================
+  // BUILD
+  // ================================================================
 
   @override
   Widget build(BuildContext context) {
@@ -153,21 +173,27 @@ class _ARScannerScreenState extends State<ARScannerScreen> {
     if (_checkingPermissions) {
       return const Scaffold(
         backgroundColor: Colors.black,
-        body: Center(child: CircularProgressIndicator()),
+        body: Center(
+          child: CircularProgressIndicator(),
+        ),
       );
     }
 
     if (!_permissionsGranted) {
       return Scaffold(
         backgroundColor: Colors.black,
-        appBar: AppBar(title: const Text('Permisos requeridos')),
+        appBar: AppBar(
+          title: const Text('Permisos requeridos'),
+        ),
         body: const Center(
           child: Padding(
             padding: EdgeInsets.all(24.0),
             child: Text(
               'No se otorgaron los permisos de cámara/ubicación. '
               'Habilítalos desde los ajustes del sistema para poder escanear.',
-              style: TextStyle(color: Colors.white70),
+              style: TextStyle(
+                color: Colors.white70,
+              ),
               textAlign: TextAlign.center,
             ),
           ),
@@ -226,7 +252,8 @@ class _ARScannerScreenState extends State<ARScannerScreen> {
                     color: Colors.white,
                   ),
                   label: Text(
-                    provider.currentRoom?.name ?? 'Nuevo Ambiente',
+                    provider.currentRoom?.name ??
+                        'Nuevo Ambiente',
                   ),
                   backgroundColor: Colors.black87,
                   labelStyle: const TextStyle(
@@ -238,7 +265,9 @@ class _ARScannerScreenState extends State<ARScannerScreen> {
                     IconButton.filledTonal(
                       tooltip: 'Ver plano del proyecto',
                       onPressed: _openFloorPlan,
-                      icon: const Icon(Icons.map_outlined),
+                      icon: const Icon(
+                        Icons.map_outlined,
+                      ),
                       style: IconButton.styleFrom(
                         backgroundColor: Colors.black87,
                         foregroundColor: Colors.white,
@@ -359,8 +388,10 @@ class _ARScannerScreenState extends State<ARScannerScreen> {
                             type.name.toUpperCase(),
                           ),
                           selected: isSelected,
-                          selectedColor: Colors.blueAccent,
-                          backgroundColor: Colors.black87,
+                          selectedColor:
+                              Colors.blueAccent,
+                          backgroundColor:
+                              Colors.black87,
                           labelStyle: TextStyle(
                             color: isSelected
                                 ? Colors.white
@@ -392,15 +423,20 @@ class _ARScannerScreenState extends State<ARScannerScreen> {
                       onPressed:
                           provider.currentPointsCount > 0
                               ? () {
-                                  HapticFeedback.lightImpact();
+                                  HapticFeedback
+                                      .lightImpact();
 
                                   provider.removeLastPoint();
                                 }
                               : null,
-                      icon: const Icon(Icons.undo),
+                      icon: const Icon(
+                        Icons.undo,
+                      ),
                       style: IconButton.styleFrom(
-                        backgroundColor: Colors.black87,
-                        foregroundColor: Colors.white,
+                        backgroundColor:
+                            Colors.black87,
+                        foregroundColor:
+                            Colors.white,
                       ),
                     ),
 
@@ -408,35 +444,56 @@ class _ARScannerScreenState extends State<ARScannerScreen> {
 
                     Expanded(
                       child: ElevatedButton.icon(
-                        onPressed: () => _onCapturePressed(provider),
+                        onPressed: () =>
+                            _onCapturePressed(
+                          provider,
+                        ),
                         icon: Icon(
-                          _currentMode == AppMode.wall
-                              ? Icons.add_location_alt_outlined
-                              : _currentMode == AppMode.door
-                                  ? Icons.door_front_door
+                          _currentMode ==
+                                  AppMode.wall
+                              ? Icons
+                                  .add_location_alt_outlined
+                              : _currentMode ==
+                                      AppMode.door
+                                  ? Icons
+                                      .door_front_door
                                   : Icons.window,
                         ),
                         label: Text(
-                          _currentMode == AppMode.wall
+                          _currentMode ==
+                                  AppMode.wall
                               ? 'AÑADIR ESQUINA'
-                              : _currentMode == AppMode.door
+                              : _currentMode ==
+                                      AppMode.door
                                   ? 'AÑADIR PUERTA'
                                   : 'AÑADIR VENTANA',
                         ),
-                        style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(
+                        style:
+                            ElevatedButton.styleFrom(
+                          padding:
+                              const EdgeInsets
+                                  .symmetric(
                             vertical: 16,
                           ),
                           backgroundColor:
-                              _currentMode == AppMode.wall
+                              _currentMode ==
+                                      AppMode.wall
                                   ? Colors.blueAccent
-                                  : _currentMode == AppMode.door
-                                      ? Colors.redAccent
-                                      : Colors.blue.shade300,
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
+                                  : _currentMode ==
+                                          AppMode.door
+                                      ? Colors
+                                          .redAccent
+                                      : Colors
+                                          .blue
+                                          .shade300,
+                          foregroundColor:
+                              Colors.white,
+                          shape:
+                              RoundedRectangleBorder(
                             borderRadius:
-                                BorderRadius.circular(16),
+                                BorderRadius.circular(
+                              16,
+                            ),
                           ),
                         ),
                       ),
@@ -446,16 +503,24 @@ class _ARScannerScreenState extends State<ARScannerScreen> {
 
                     IconButton.filled(
                       onPressed:
-                          provider.currentPointsCount >= 3
-                              ? () => _onCloseRoomPressed(provider)
+                          provider.currentPointsCount >=
+                                  3
+                              ? () =>
+                                  _onCloseRoomPressed(
+                                    provider,
+                                  )
                               : null,
-                      icon: const Icon(Icons.check),
+                      icon: const Icon(
+                        Icons.check,
+                      ),
                       style: IconButton.styleFrom(
                         backgroundColor:
-                            provider.currentPointsCount >= 3
+                            provider.currentPointsCount >=
+                                    3
                                 ? Colors.green
                                 : Colors.grey,
-                        foregroundColor: Colors.white,
+                        foregroundColor:
+                            Colors.white,
                       ),
                     ),
                   ],
@@ -519,22 +584,27 @@ class _ARScannerScreenState extends State<ARScannerScreen> {
   // CAPTURA DE PUNTOS / ABERTURAS
   // ================================================================
 
-  Future<void> _onCapturePressed(ScannerProvider provider) async {
+  Future<void> _onCapturePressed(
+    ScannerProvider provider,
+  ) async {
     HapticFeedback.lightImpact();
 
-    final pos = await _getCurrentCameraPosition();
+    final pos =
+        await _getCurrentCameraPosition();
+
     if (!mounted) return;
 
     if (pos == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'No se detectó una posición de cámara válida. Apunta a una '
-            'superficie reconocida e intenta de nuevo.',
+            'No se detectó una posición de cámara válida. '
+            'Apunta a una superficie reconocida e intenta de nuevo.',
           ),
           backgroundColor: Colors.orange,
         ),
       );
+
       return;
     }
 
@@ -542,32 +612,53 @@ class _ARScannerScreenState extends State<ARScannerScreen> {
       case AppMode.wall:
         _handleWallPoint(provider, pos);
         break;
+
       case AppMode.door:
       case AppMode.window:
-        _handleFeatureInsertion(provider, _currentMode, pos);
+        _handleFeatureInsertion(
+          provider,
+          _currentMode,
+          pos,
+        );
         break;
     }
   }
 
-  void _handleWallPoint(ScannerProvider provider, vector.Vector3 pos) {
-    final ValidationResult result = provider.tryAddPoint(pos.x, pos.y, pos.z);
+  void _handleWallPoint(
+    ScannerProvider provider,
+    vector.Vector3 pos,
+  ) {
+    final ValidationResult result =
+        provider.tryAddPoint(
+      pos.x,
+      pos.y,
+      pos.z,
+    );
 
     if (!result.isValid) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(result.errorMessage ?? 'Punto inválido.'),
+          content: Text(
+            result.errorMessage ??
+                'Punto inválido.',
+          ),
           backgroundColor: Colors.redAccent,
         ),
       );
+
       return;
     }
 
     if (result.warningMessage != null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(result.warningMessage!),
-          backgroundColor: Colors.amber.shade800,
-          duration: const Duration(seconds: 2),
+          content: Text(
+            result.warningMessage!,
+          ),
+          backgroundColor:
+              Colors.amber.shade800,
+          duration:
+              const Duration(seconds: 2),
         ),
       );
     }
@@ -592,17 +683,24 @@ class _ARScannerScreenState extends State<ARScannerScreen> {
       return;
     }
 
-    final label = mode == AppMode.door ? 'Puerta' : 'Ventana';
-    final featureType =
-        mode == AppMode.door ? FeatureType.door : FeatureType.window;
+    final label =
+        mode == AppMode.door
+            ? 'Puerta'
+            : 'Ventana';
 
-    // Las puertas/ventanas se guardan como WallFeature (con su propio punto
-    // de inicio/fin), no como un vértice más del contorno: antes se
-    // insertaban con `addPoint`, lo que agregaba una esquina falsa al
-    // polígono de la habitación por cada puerta o ventana marcada.
+    final featureType =
+        mode == AppMode.door
+            ? FeatureType.door
+            : FeatureType.window;
+
+    // Las puertas/ventanas se guardan como WallFeature.
     provider.addFeatureToCurrentRoom(
       featureType,
-      ARPoint(x: position.x, y: position.y, z: position.z),
+      ARPoint(
+        x: position.x,
+        y: position.y,
+        z: position.z,
+      ),
     );
 
     ScaffoldMessenger.of(context).showSnackBar(
@@ -610,7 +708,8 @@ class _ARScannerScreenState extends State<ARScannerScreen> {
         content: Text(
           '$label marcada en la posición actual',
         ),
-        duration: const Duration(seconds: 1),
+        duration:
+            const Duration(seconds: 1),
       ),
     );
   }
@@ -619,10 +718,13 @@ class _ARScannerScreenState extends State<ARScannerScreen> {
   // CIERRE Y PERSISTENCIA DE LA HABITACIÓN
   // ================================================================
 
-  Future<void> _onCloseRoomPressed(ScannerProvider provider) async {
+  Future<void> _onCloseRoomPressed(
+    ScannerProvider provider,
+  ) async {
     HapticFeedback.mediumImpact();
 
-    final closedRoom = provider.closeCurrentRoom();
+    final closedRoom =
+        provider.closeCurrentRoom();
 
     if (!mounted) return;
 
@@ -631,26 +733,31 @@ class _ARScannerScreenState extends State<ARScannerScreen> {
         SnackBar(
           content: Text(
             provider.lastCloseError ??
-                'No se pudo cerrar la habitación. Revisa los puntos trazados.',
+                'No se pudo cerrar la habitación. '
+                'Revisa los puntos trazados.',
           ),
-          backgroundColor: Colors.redAccent,
+          backgroundColor:
+              Colors.redAccent,
         ),
       );
+
       return;
     }
 
-    // Persistir de inmediato: antes la habitación cerrada solo quedaba en
-    // memoria dentro de ScannerProvider y se perdía apenas se volvía al
-    // dashboard, porque ninguna pantalla llamaba a
-    // FloorPlanProvider.addCompletedRoom (que a su vez ya guarda en Isar a
-    // través del `persister` conectado en main.dart).
-    await context.read<FloorPlanProvider>().addCompletedRoom(closedRoom);
+    // Persistir inmediatamente.
+    await context
+        .read<FloorPlanProvider>()
+        .addCompletedRoom(
+          closedRoom,
+        );
 
     if (!mounted) return;
 
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('¡Ambiente guardado correctamente!'),
+        content: Text(
+          '¡Ambiente guardado correctamente!',
+        ),
         backgroundColor: Colors.green,
       ),
     );
@@ -658,10 +765,17 @@ class _ARScannerScreenState extends State<ARScannerScreen> {
     Navigator.pop(context);
   }
 
+  // ================================================================
+  // PLANO
+  // ================================================================
+
   void _openFloorPlan() {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => const FloorPlanViewerScreen()),
+      MaterialPageRoute(
+        builder: (_) =>
+            const FloorPlanViewerScreen(),
+      ),
     );
   }
 }
