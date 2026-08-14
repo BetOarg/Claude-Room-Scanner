@@ -1,7 +1,9 @@
 package com.tuempresa.room_scanner_ar
 
 import android.os.Bundle
+
 import com.google.ar.core.ArCoreApk
+
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -9,7 +11,8 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterActivity() {
 
     companion object {
-        private const val CHANNEL =
+
+        private const val DEVICE_CAPABILITIES_CHANNEL =
             "com.betOarg.room_scanner_ar/device_capabilities"
     }
 
@@ -18,10 +21,12 @@ class MainActivity : FlutterActivity() {
     ) {
         super.configureFlutterEngine(flutterEngine)
 
-        MethodChannel(
+        val channel = MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
-            CHANNEL
-        ).setMethodCallHandler { call, result ->
+            DEVICE_CAPABILITIES_CHANNEL
+        )
+
+        channel.setMethodCallHandler { call, result ->
 
             when (call.method) {
 
@@ -41,26 +46,48 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    /**
+     * Comprueba si el dispositivo Android es compatible con ARCore.
+     *
+     * IMPORTANTE:
+     *
+     * - No instala ARCore.
+     * - No inicia una sesión AR.
+     * - No obliga a utilizar ARCore.
+     *
+     * Solamente determina si el dispositivo puede utilizar
+     * las funcionalidades AR.
+     *
+     * Si devuelve false, Flutter podrá utilizar el Basic Scanner.
+     */
     private fun checkARCoreAvailability(
         result: MethodChannel.Result
     ) {
+
         try {
-            ArCoreApk.getInstance().checkAvailabilityAsync(
-                applicationContext
-            ) { availability ->
 
-                val supported =
-                    availability == ArCoreApk.Availability.SUPPORTED_INSTALLED ||
-                    availability == ArCoreApk.Availability.SUPPORTED_APK_TOO_OLD ||
-                    availability == ArCoreApk.Availability.SUPPORTED_NOT_INSTALLED
+            ArCoreApk.getInstance()
+                .checkAvailabilityAsync(
+                    applicationContext
+                ) { availability ->
 
-                result.success(supported)
-            }
+                    val supported =
+                        availability ==
+                                ArCoreApk.Availability.SUPPORTED_INSTALLED ||
+                        availability ==
+                                ArCoreApk.Availability.SUPPORTED_APK_TOO_OLD ||
+                        availability ==
+                                ArCoreApk.Availability.SUPPORTED_NOT_INSTALLED
+
+                    result.success(supported)
+                }
 
         } catch (exception: Exception) {
+
             result.error(
                 "ARCORE_CHECK_FAILED",
-                exception.message,
+                exception.message
+                    ?: "No se pudo comprobar ARCore.",
                 null
             )
         }
