@@ -7,22 +7,24 @@ plugins {
 // Carga segura de variables desde local.properties o valores por defecto
 def localProperties = new Properties()
 def localPropertiesFile = rootProject.file('local.properties')
+
 if (localPropertiesFile.exists()) {
     localPropertiesFile.withReader('UTF-8') { reader ->
         localProperties.load(reader)
     }
 }
 
-def flutterVersionCode = localProperties.getProperty('flutter.versionCode') ?: '1'
-def flutterVersionName = localProperties.getProperty('flutter.versionName') ?: '1.0'
+def flutterVersionCode =
+        localProperties.getProperty('flutter.versionCode') ?: '1'
 
-// Firma de release: si existe android/key.properties (no versionado, con un
-// keystore real) se usa para firmar el build de release. Si no existe, el
-// build cae de nuevo en la clave de debug para no romper `flutter build apk
-// --release` en desarrollo local.
+def flutterVersionName =
+        localProperties.getProperty('flutter.versionName') ?: '1.0'
+
+// Firma de release
 def keystoreProperties = new Properties()
 def keystorePropertiesFile = rootProject.file('key.properties')
 def hasReleaseKeystore = keystorePropertiesFile.exists()
+
 if (hasReleaseKeystore) {
     keystorePropertiesFile.withReader('UTF-8') { reader ->
         keystoreProperties.load(reader)
@@ -31,6 +33,7 @@ if (hasReleaseKeystore) {
 
 android {
     namespace "com.tuempresa.room_scanner_ar"
+
     compileSdkVersion 34
 
     compileOptions {
@@ -44,9 +47,13 @@ android {
 
     defaultConfig {
         applicationId "com.tuempresa.room_scanner_ar"
-        minSdkVersion 28 // <--- CAMBIADO DE 24 A 28
+
+        minSdkVersion 28
+
         targetSdkVersion 34
+
         versionCode flutterVersionCode.toInteger()
+
         versionName flutterVersionName
     }
 
@@ -55,7 +62,11 @@ android {
             release {
                 keyAlias keystoreProperties['keyAlias']
                 keyPassword keystoreProperties['keyPassword']
-                storeFile keystoreProperties['storeFile'] ? file(keystoreProperties['storeFile']) : null
+
+                storeFile keystoreProperties['storeFile']
+                        ? file(keystoreProperties['storeFile'])
+                        : null
+
                 storePassword keystoreProperties['storePassword']
             }
         }
@@ -63,15 +74,12 @@ android {
 
     buildTypes {
         release {
-            // ADVERTENCIA: sin android/key.properties con un keystore real,
-            // este build de "release" queda firmado con la clave de DEBUG.
-            // Sirve para probar `flutter build apk --release` localmente,
-            // pero NO se puede publicar en Play Store ni distribuir a
-            // usuarios así. Antes de publicar, generá un keystore y un
-            // android/key.properties (ver la guía oficial de Flutter
-            // "Build and release an Android app").
-            signingConfig hasReleaseKeystore ? signingConfigs.release : signingConfigs.debug
+            signingConfig hasReleaseKeystore
+                    ? signingConfigs.release
+                    : signingConfigs.debug
+
             minifyEnabled false
+
             shrinkResources false
         }
     }
@@ -82,6 +90,23 @@ flutter {
 }
 
 dependencies {
-    // Proporciona a AAPT los temas base AppCompat
+
+    // ================================================================
+    // ANDROIDX
+    // ================================================================
+
     implementation 'androidx.appcompat:appcompat:1.6.1'
+
+    // ================================================================
+    // GOOGLE ARCORE
+    // ================================================================
+    //
+    // Se utiliza para detectar correctamente si el dispositivo
+    // Android soporta ARCore mediante ArCoreApk.
+    //
+    // IMPORTANTE:
+    // Esta dependencia no obliga a que el dispositivo tenga ARCore.
+    // Permite consultar su disponibilidad en tiempo de ejecución.
+    //
+    implementation 'com.google.ar:core:1.54.0'
 }
