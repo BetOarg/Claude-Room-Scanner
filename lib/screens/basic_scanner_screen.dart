@@ -3,12 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../models/room_model.dart';
 import '../providers/floor_plan_provider.dart';
 import '../providers/scanner_provider.dart';
 import '../scanner/adapters/basic_scanner_adapter.dart';
+import '../scanner/models/scanner_point.dart';
 import '../scanner/services/scanner_permission_service.dart';
-import '../models/room_model.dart';
-import '../utils/scan_validator.dart';
 import 'floor_plan_viewer_screen.dart';
 
 enum BasicAppMode {
@@ -17,17 +17,6 @@ enum BasicAppMode {
   window,
 }
 
-/// Scanner de respaldo para dispositivos sin ARCore/ARKit.
-///
-/// Utiliza:
-///
-/// - cámara del dispositivo;
-/// - medición guiada;
-/// - coordenadas métricas X/Z;
-/// - ScannerProvider;
-/// - ScanValidator.
-///
-/// No requiere RealityKit, ARKit ni ARCore.
 class BasicScannerScreen extends StatefulWidget {
   final String projectUuid;
   final String projectName;
@@ -317,7 +306,7 @@ class _BasicScannerScreenState
             children: [
               Chip(
                 avatar: const Icon(
-                  Icons.camera_alt,
+                  Icons.meeting_room,
                   size: 16,
                   color: Colors.white,
                 ),
@@ -351,22 +340,19 @@ class _BasicScannerScreenState
                     ),
                   ),
                   const SizedBox(width: 8),
-                  Chip(
+                  const Chip(
                     avatar: Icon(
-                      Icons.circle,
-                      size: 10,
-                      color: provider
-                              .isTrackingOk
-                          ? Colors.greenAccent
-                          : Colors.orangeAccent,
+                      Icons.camera_alt,
+                      size: 16,
+                      color: Colors.white,
                     ),
-                    label: const Text(
+                    label: Text(
                       'Básico',
                     ),
                     backgroundColor:
                         Colors.black87,
                     labelStyle:
-                        const TextStyle(
+                        TextStyle(
                       color: Colors.white,
                     ),
                   ),
@@ -388,8 +374,8 @@ class _BasicScannerScreenState
                   BorderRadius.circular(12),
             ),
             child: const Text(
-              'Modo sin ARCore/ARKit · '
-              'Las distancias se ingresan manualmente.',
+              'Sin ARCore/ARKit · '
+              'Cámara + medición guiada',
               style: TextStyle(
                 color: Colors.white70,
                 fontSize: 12,
@@ -489,10 +475,6 @@ class _BasicScannerScreenState
 
                             provider
                                 .removeLastPoint();
-
-                            _rebuildAdapterFromProvider(
-                              provider,
-                            );
                           }
                         : null,
                 icon: const Icon(
@@ -618,7 +600,6 @@ class _BasicScannerScreenState
   ) async {
     HapticFeedback.lightImpact();
 
-    // Primera esquina = origen.
     if (provider.currentPointsCount == 0) {
       final point =
           await _scannerAdapter
@@ -631,19 +612,10 @@ class _BasicScannerScreenState
         return;
       }
 
-      final result =
-          provider.tryAddPoint(
-        point.x,
-        point.y,
-        point.z,
+      _addWallPoint(
+        provider,
+        point,
       );
-
-      if (!result.isValid) {
-        _showMessage(
-          result.errorMessage ??
-              'Punto inválido.',
-        );
-      }
 
       return;
     }
@@ -703,7 +675,7 @@ class _BasicScannerScreenState
 
   void _addWallPoint(
     ScannerProvider provider,
-    dynamic point,
+    ScannerPoint point,
   ) {
     final result =
         provider.tryAddPoint(
@@ -759,7 +731,7 @@ class _BasicScannerScreenState
                 decoration:
                     const InputDecoration(
                   labelText:
-                      'Distancia (metros)',
+                      'Distancia',
                   hintText:
                       'Ej. 3.50',
                   suffixText: 'm',
@@ -778,17 +750,18 @@ class _BasicScannerScreenState
                 decoration:
                     const InputDecoration(
                   labelText:
-                      'Dirección (grados)',
+                      'Dirección',
                   hintText:
-                      '0 = adelante, 90 = derecha',
+                      '0, 90, 180, 270...',
                   suffixText: '°',
                 ),
               ),
               const SizedBox(height: 12),
               const Text(
-                'La dirección se mide respecto del '
-                'eje del plano. Para un rectángulo '
-                'puedes usar 0°, 90°, 180° y 270°.',
+                '0° = adelante · '
+                '90° = derecha · '
+                '180° = atrás · '
+                '270° = izquierda',
                 style: TextStyle(
                   fontSize: 12,
                 ),
@@ -835,7 +808,7 @@ class _BasicScannerScreenState
                   ).showSnackBar(
                     const SnackBar(
                       content: Text(
-                        'Ingresa una distancia y dirección válidas.',
+                        'Ingresa valores válidos.',
                       ),
                     ),
                   );
@@ -857,23 +830,6 @@ class _BasicScannerScreenState
         );
       },
     );
-  }
-
-  void _rebuildAdapterFromProvider(
-    ScannerProvider provider,
-  ) {
-    _scannerAdapter.reset();
-
-    // El adapter necesita conocer la cantidad
-    // de puntos existentes. Para v1 no
-    // reconstruimos el historial completo
-    // porque el usuario simplemente deshizo
-    // el último punto.
-    //
-    // La próxima captura seguirá desde la
-    // posición calculada actualmente por el
-    // adapter cuando no se haya reiniciado
-    // completamente la sesión.
   }
 
   Future<void> _closeRoom(
@@ -899,7 +855,8 @@ class _BasicScannerScreenState
     if (!mounted) return;
 
     _showMessage(
-      'Ambiente guardado correctamente.',
+      
+    'Ambiente guardado correctamente.',
     );
 
     Navigator.pop(context);
