@@ -6,15 +6,12 @@ import '../models/scanner_point.dart';
 
 /// Scanner básico para dispositivos que no disponen de ARCore/ARKit.
 ///
-/// Este adapter no intenta fabricar una pose 3D falsa.
+/// No intenta simular tracking AR.
 ///
-/// La posición se calcula mediante mediciones relativas introducidas por
-/// el usuario:
+/// La posición se obtiene mediante mediciones introducidas por el usuario:
 ///
-/// - distancia desde el último punto;
-/// - dirección en grados.
-///
-/// El plano utilizado es X/Z, igual que ScanValidator.
+/// - distancia desde la última esquina;
+/// - dirección absoluta en grados.
 ///
 /// Convención:
 ///
@@ -23,7 +20,13 @@ import '../models/scanner_point.dart';
 ///   180° = -Z
 ///   270° = -X
 ///
-/// Este es el fallback seguro de v1 para dispositivos sin AR.
+/// El adapter utiliza un modelo transaccional:
+///
+/// 1. calcula una posición candidata;
+/// 2. ScannerProvider valida la geometría;
+/// 3. solamente si la geometría es válida se confirma el punto.
+///
+/// Esto evita que una medición rechazada contamine las mediciones siguientes.
 class BasicScannerAdapter implements ScannerAdapter {
   bool _initialized = false;
   bool _tracking = false;
@@ -34,57 +37,45 @@ class BasicScannerAdapter implements ScannerAdapter {
   double? _pendingDistance;
   double? _pendingAngleDegrees;
 
-  int _capturedPoints = 0;
+  final List<ScannerPoint> _history = [];
 
   @override
   ScannerMode get mode => ScannerMode.basic;
 
-  /// El adapter básico no depende de ARCore ni ARKit.
   @override
   bool get isAvailable => true;
 
   @override
   bool get isTracking => _tracking;
 
-  int get capturedPoints => _capturedPoints;
+  int get capturedPoints => _history.length;
 
   double get currentX => _currentX;
 
   double get currentZ => _currentZ;
 
-  /// Inicializa el sistema geométrico.
   @override
   Future<void> initialize() async {
     _initialized = true;
     _tracking = true;
+
+    reset();
   }
 
-  /// Define la medición que será utilizada por la próxima captura.
-  ///
-  /// [distanceMeters]
-  /// Distancia desde el último punto.
-  ///
-  /// [angleDegrees]
-  /// Dirección respecto del eje +Z.
+  /// Define la medición para la próxima esquina.
   void setNextMeasurement({
     required double distanceMeters,
     required double angleDegrees,
   }) {
-    if (distanceMeters <= 0) {
+    if (!distanceMeters.isFinite || distanceMeters <= 0) {
       throw ArgumentError(
-        'La distancia debe ser mayor que cero.',
-      );
-    }
-
-    if (!distanceMeters.isFinite) {
-      throw ArgumentError(
-        'La distancia no es válida.',
+        'La distancia debe ser mayor que 0.',
       );
     }
 
     if (!angleDegrees.isFinite) {
       throw ArgumentError(
-        'El ángulo no es válido.',
+        'La dirección debe ser un número válido.',
       );
     }
 
@@ -92,26 +83,17 @@ class BasicScannerAdapter implements ScannerAdapter {
     _pendingAngleDegrees = angleDegrees;
   }
 
-  /// Captura el siguiente punto.
+  /// Calcula el próximo punto sin modificar el estado.
   ///
-  /// La primera captura siempre crea el origen:
-  ///
-  ///     (0, 0, 0)
-  ///
-  /// Las siguientes capturas requieren una medición previamente definida
-  /// mediante [setNextMeasurement].
-  @override
-  Future<ScannerPoint?> capturePoint() async {
+  /// El punto debe ser confirmado mediante [commitPendingPoint]
+  /// solamente después de que ScannerProvider lo haya validado.
+  ScannerPoint? previewNextPoint() {
     if (!_initialized) {
       return null;
     }
 
     // Primera esquina = origen.
-    if (_capturedPoints == 0) {
-      _currentX = 0.0;
-      _currentZ = 0.0;
-      _capturedPoints++;
-
+    if (_history.isEmpty) {
       return const ScannerPoint(
         x: 0.0,
         y: 0.0,
@@ -131,39 +113,86 @@ class BasicScannerAdapter implements ScannerAdapter {
     final angleRadians =
         angleDegrees * math.pi / 180.0;
 
-    // Convención:
-    //
-    // 0° = +Z
-    // 90° = +X
-    //
-    // Por lo tanto:
-    //
-    // X = sin(ángulo) * distancia
-    // Z = cos(ángulo) * distancia
     final deltaX =
         math.sin(angleRadians) * distance;
 
     final deltaZ =
         math.cos(angleRadians) * distance;
 
-    _currentX += deltaX;
-    _currentZ += deltaZ;
-
-    _pendingDistance = null;
-    _pendingAngleDegrees = null;
-
-    _capturedPoints++;
-
     return ScannerPoint(
-      x: _currentX,
+      x: _currentX + deltaX,
       y: 0.0,
-      z: _currentZ,
+      z: _currentZ + deltaZ,
       accuracy: 0.0,
       source: PointSource.camera,
     );
   }
 
-  /// Reinicia el trazado geométrico.
+  /// Confirma el punto después de que el provider lo haya aceptado.
+  void commitPendingPoint(
+    ScannerPoint point,
+  ) {
+    if (!_initialized) {
+      return;
+    }
+
+    _currentX = point.x;
+    _currentZ = point.z;
+
+    _history.add(point);
+
+    _pendingDistance = null;
+    _pendingAngleDegrees = null;
+  }
+
+  /// Captura y confirma directamente un punto.
+  ///
+  /// Se conserva para compatibilidad con ScannerAdapter.
+  @override
+  Future<ScannerPoint?> capturePoint() async {
+    final point = previewNextPoint();
+
+    if (point == null) {
+      return null;
+    }
+
+    commitPendingPoint(point);
+
+    return point;
+  }
+
+  /// Elimina la última esquina confirmada.
+  ///
+  /// Se utiliza junto con ScannerProvider.removeLastPoint().
+  void removeLastPoint() {
+    if (_history.isEmpty) {
+      return;
+    }
+
+    _history.removeLast();
+
+    _pendingDistance = null;
+    _pendingAngleDegrees = null;
+
+    if (_history.isEmpty) {
+      _currentX = 0.0;
+      _currentZ = 0.0;
+      return;
+    }
+
+    final last = _history.last;
+
+    _currentX = last.x;
+    _currentZ = last.z;
+  }
+
+  /// Cancela una medición pendiente sin modificar la geometría.
+  void cancelPendingMeasurement() {
+    _pendingDistance = null;
+    _pendingAngleDegrees = null;
+  }
+
+  /// Reinicia completamente el trazado.
   void reset() {
     _currentX = 0.0;
     _currentZ = 0.0;
@@ -171,7 +200,7 @@ class BasicScannerAdapter implements ScannerAdapter {
     _pendingDistance = null;
     _pendingAngleDegrees = null;
 
-    _capturedPoints = 0;
+    _history.clear();
   }
 
   @override
