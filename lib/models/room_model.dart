@@ -1,34 +1,64 @@
 import 'package:vector_math/vector_math_64.dart' as vector;
 
-enum RoomType { living, cocina, bano, dormitorio, lavadero, pasillo }
-enum FeatureType { door, window }
+enum RoomType {
+  living,
+  cocina,
+  bano,
+  dormitorio,
+  lavadero,
+  pasillo,
+}
 
-/// Punto en el espacio 3D (x, y, z) – sin timestamp para simplificar
+enum FeatureType {
+  door,
+  window,
+}
+
+/// Punto en el espacio 3D.
 class ARPoint {
   final double x;
   final double y;
   final double z;
 
-  ARPoint({required this.x, required this.y, required this.z});
+  ARPoint({
+    required this.x,
+    required this.y,
+    required this.z,
+  });
 
-  factory ARPoint.fromVector3(vector.Vector3 v) {
-    return ARPoint(x: v.x, y: v.y, z: v.z);
+  factory ARPoint.fromVector3(
+    vector.Vector3 v,
+  ) {
+    return ARPoint(
+      x: v.x,
+      y: v.y,
+      z: v.z,
+    );
   }
 
-  Map<String, dynamic> toJson() => {
-        'x': x,
-        'y': y,
-        'z': z,
-      };
+  Map<String, dynamic> toJson() {
+    return {
+      'x': x,
+      'y': y,
+      'z': z,
+    };
+  }
 
-  factory ARPoint.fromJson(Map<String, dynamic> json) => ARPoint(
-        x: (json['x'] as num).toDouble(),
-        y: (json['y'] as num).toDouble(),
-        z: (json['z'] as num).toDouble(),
-      );
+  factory ARPoint.fromJson(
+    Map<String, dynamic> json,
+  ) {
+    return ARPoint(
+      x: (json['x'] as num)
+          .toDouble(),
+      y: (json['y'] as num)
+          .toDouble(),
+      z: (json['z'] as num)
+          .toDouble(),
+    );
+  }
 }
 
-/// Representa una puerta o ventana sobre una pared (definida por dos puntos)
+/// Representa una puerta o ventana sobre una pared.
 class WallFeature {
   final String id;
   final FeatureType type;
@@ -42,29 +72,45 @@ class WallFeature {
     required this.end,
   });
 
-  Map<String, dynamic> toJson() => {
-        'id': id,
-        'type': type.name,
-        'start': start.toJson(),
-        'end': end.toJson(),
-      };
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'type': type.name,
+      'start': start.toJson(),
+      'end': end.toJson(),
+    };
+  }
 
-  factory WallFeature.fromJson(Map<String, dynamic> json) => WallFeature(
-        id: json['id'] as String,
-        type: FeatureType.values.firstWhere(
-            (e) => e.name == json['type']),
-        start: ARPoint.fromJson(json['start'] as Map<String, dynamic>),
-        end: ARPoint.fromJson(json['end'] as Map<String, dynamic>),
-      );
+  factory WallFeature.fromJson(
+    Map<String, dynamic> json,
+  ) {
+    return WallFeature(
+      id: json['id'] as String,
+      type:
+          FeatureType.values.firstWhere(
+        (e) =>
+            e.name ==
+            json['type'],
+      ),
+      start: ARPoint.fromJson(
+        json['start']
+            as Map<String, dynamic>,
+      ),
+      end: ARPoint.fromJson(
+        json['end']
+            as Map<String, dynamic>,
+      ),
+    );
+  }
 }
 
-/// Habitación con sus puntos (contorno) y elementos (puertas/ventanas)
+/// Habitación con su contorno y sus elementos.
 class RoomModel {
   final String id;
   final String name;
   final RoomType type;
   final List<ARPoint> points;
-  final List<WallFeature> features; // <-- NUEVO
+  final List<WallFeature> features;
   final bool isClosed;
 
   RoomModel({
@@ -89,35 +135,73 @@ class RoomModel {
       name: name ?? this.name,
       type: type ?? this.type,
       points: points ?? this.points,
-      features: features ?? this.features,
-      isClosed: isClosed ?? this.isClosed,
+      features:
+          features ?? this.features,
+      isClosed:
+          isClosed ?? this.isClosed,
     );
   }
 
-  Map<String, dynamic> toJson() => {
-        'id': id,
-        'name': name,
-        'type': type.name,
-        'points': points.map((p) => p.toJson()).toList(),
-        'features': features.map((f) => f.toJson()).toList(),
-        'isClosed': isClosed,
-      };
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'type': type.name,
+      'points': points
+          .map(
+            (p) => p.toJson(),
+          )
+          .toList(),
+      'features': features
+          .map(
+            (f) => f.toJson(),
+          )
+          .toList(),
+      'isClosed': isClosed,
+    };
+  }
 
-  factory RoomModel.fromJson(Map<String, dynamic> json) => RoomModel(
-        id: json['id'] as String,
-        name: json['name'] as String,
-        type: RoomType.values.firstWhere(
-          (e) => e.name == json['type'],
-          orElse: () => RoomType.living,
-        ),
-        points: (json['points'] as List)
-            .map((p) => ARPoint.fromJson(p as Map<String, dynamic>))
-            .toList(),
-        features: json['features'] != null
-            ? (json['features'] as List)
-                .map((f) => WallFeature.fromJson(f as Map<String, dynamic>))
-                .toList()
-            : [],
-        isClosed: json['isClosed'] as bool? ?? false,
-      );
+  factory RoomModel.fromJson(
+    Map<String, dynamic> json,
+  ) {
+    return RoomModel(
+      id: json['id'] as String,
+      name: json['name'] as String,
+      type:
+          RoomType.values.firstWhere(
+        (e) =>
+            e.name ==
+            json['type'],
+        orElse: () =>
+            RoomType.living,
+      ),
+      points:
+          (json['points'] as List)
+              .map(
+                (p) => ARPoint.fromJson(
+                  p as Map<
+                      String,
+                      dynamic>,
+                ),
+              )
+              .toList(),
+      features:
+          json['features'] != null
+              ? (json['features'] as List)
+                  .map(
+                    (f) =>
+                        WallFeature.fromJson(
+                      f as Map<
+                          String,
+                          dynamic>,
+                    ),
+                  )
+                  .toList()
+              : [],
+      isClosed:
+          json['isClosed']
+              as bool? ??
+          false,
+    );
+  }
 }
