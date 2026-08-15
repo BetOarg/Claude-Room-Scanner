@@ -1,85 +1,112 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 
+import '../scanner/engine/scanner_capabilities.dart';
+import '../scanner/services/device_capabilities_service.dart';
+import '../screens/ar_scanner_screen.dart';
+import '../screens/basic_scanner_screen.dart';
+
 class ArCheckService {
-  /// Valida que la aplicación esté ejecutándose en una plataforma
-  /// compatible con el módulo AR y posteriormente abre el escáner.
+  ArCheckService._();
+
+  /// Selecciona automáticamente el mejor scanner disponible.
   ///
-  /// La compatibilidad específica con ARCore/ARKit se valida durante
-  /// la inicialización de ARView.
+  /// Prioridad:
+  ///
+  /// 1. ARCore / ARKit
+  /// 2. Cámara básica
+  /// 3. Aviso de dispositivo no compatible
   static Future<void> abrirEscanerConValidacion(
     BuildContext context, {
-    required Widget pantallaEscaneoAR,
+    required String projectUuid,
+    required String projectName,
   }) async {
     try {
-      final plataformaCompatible = Platform.isAndroid || Platform.isIOS;
+      final capabilities =
+          await DeviceCapabilitiesService.detect();
 
       if (!context.mounted) return;
 
-      if (plataformaCompatible) {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => pantallaEscaneoAR,
-          ),
+      final Widget scannerScreen;
+
+      if (capabilities.supportsAR) {
+        scannerScreen = ARScannerScreen(
+          projectUuid: projectUuid,
+          projectName: projectName,
+        );
+      } else if (capabilities.supportsBasicScanner) {
+        scannerScreen = BasicScannerScreen(
+          projectUuid: projectUuid,
+          projectName: projectName,
         );
       } else {
-        _mostrarAvisoNoSoportado(context);
+        _mostrarAvisoNoSoportado(
+          context,
+          capabilities,
+        );
+        return;
       }
-    } catch (_) {
+
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => scannerScreen,
+        ),
+      );
+    } catch (error) {
       if (!context.mounted) return;
 
-      _mostrarAvisoNoSoportado(context);
+      _mostrarAvisoNoSoportado(
+        context,
+        const ScannerCapabilities(),
+      );
     }
   }
 
-  /// Diálogo mostrado cuando la plataforma no puede ejecutar
-  /// el módulo AR de la aplicación.
-  static void _mostrarAvisoNoSoportado(BuildContext context) {
+  static void _mostrarAvisoNoSoportado(
+    BuildContext context,
+    ScannerCapabilities capabilities,
+  ) {
     showDialog<void>(
       context: context,
-      builder: (BuildContext dialogContext) {
+      builder: (dialogContext) {
         return AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16.0),
+          shape:
+              RoundedRectangleBorder(
+            borderRadius:
+                BorderRadius.circular(16),
           ),
           title: const Row(
             children: [
               Icon(
                 Icons.warning_amber_rounded,
                 color: Colors.orange,
-                size: 28,
               ),
               SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  'Realidad Aumentada no disponible',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  'Scanner no disponible',
                 ),
               ),
             ],
           ),
-          content: const Text(
-            'Este dispositivo o plataforma no puede ejecutar el módulo '
-            'de Realidad Aumentada.\n\n'
-            'En Android se requiere compatibilidad con ARCore y en iOS '
-            'compatibilidad con ARKit.\n\n'
-            'También puedes utilizar la opción '
-            '"Dibujar Manual (2D)" para crear tu plano.',
-            style: TextStyle(
-              fontSize: 14,
-            ),
+          content: Text(
+            capabilities.hasCamera
+                ? 'La cámara está disponible, '
+                  'pero no fue posible inicializar '
+                  'el Scanner Básico.'
+                : 'Este dispositivo no tiene una '
+                  'cámara disponible para realizar '
+                  'el escaneo.',
           ),
           actions: [
             TextButton(
               onPressed: () {
-                Navigator.of(dialogContext).pop();
+                Navigator.pop(
+                  dialogContext,
+                );
               },
-              child: const Text('Entendido'),
+              child:
+                  const Text('Entendido'),
             ),
           ],
         );
