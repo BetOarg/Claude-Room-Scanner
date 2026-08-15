@@ -1,7 +1,5 @@
 package com.tuempresa.room_scanner_ar
 
-import android.os.Bundle
-
 import com.google.ar.core.ArCoreApk
 
 import io.flutter.embedding.android.FlutterActivity
@@ -47,18 +45,29 @@ class MainActivity : FlutterActivity() {
     }
 
     /**
-     * Comprueba si el dispositivo Android es compatible con ARCore.
+     * Comprueba si ARCore está disponible y correctamente instalado
+     * para poder utilizar el Scanner AR.
      *
-     * IMPORTANTE:
+     * Esta comprobación NO instala ARCore y NO inicia una sesión AR.
      *
-     * - No instala ARCore.
-     * - No inicia una sesión AR.
-     * - No obliga a utilizar ARCore.
+     * El resultado se utiliza únicamente para seleccionar entre:
      *
-     * Solamente determina si el dispositivo puede utilizar
-     * las funcionalidades AR.
+     *   ARCore disponible e instalado
+     *       -> ARScannerScreen
      *
-     * Si devuelve false, Flutter podrá utilizar el Basic Scanner.
+     *   ARCore no disponible
+     *       -> BasicScannerScreen
+     *
+     * Para considerar ARCore utilizable exigimos:
+     *
+     *   SUPPORTED_INSTALLED
+     *
+     * No consideramos como AR disponible:
+     *
+     *   SUPPORTED_NOT_INSTALLED
+     *   SUPPORTED_APK_TOO_OLD
+     *
+     * En esos casos el usuario utilizará el Scanner Básico.
      */
     private fun checkARCoreAvailability(
         result: MethodChannel.Result
@@ -73,11 +82,7 @@ class MainActivity : FlutterActivity() {
 
                     val supported =
                         availability ==
-                                ArCoreApk.Availability.SUPPORTED_INSTALLED ||
-                        availability ==
-                                ArCoreApk.Availability.SUPPORTED_APK_TOO_OLD ||
-                        availability ==
-                                ArCoreApk.Availability.SUPPORTED_NOT_INSTALLED
+                                ArCoreApk.Availability.SUPPORTED_INSTALLED
 
                     result.success(supported)
                 }
