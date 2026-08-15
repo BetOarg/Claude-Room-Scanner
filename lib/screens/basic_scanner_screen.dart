@@ -7,6 +7,7 @@ import '../models/room_model.dart';
 import '../providers/floor_plan_provider.dart';
 import '../providers/scanner_provider.dart';
 import '../scanner/adapters/basic_scanner_adapter.dart';
+import '../scanner/models/scanner_mode.dart';
 import '../scanner/models/scanner_point.dart';
 import '../scanner/services/scanner_permission_service.dart';
 import 'floor_plan_viewer_screen.dart';
