@@ -717,8 +717,7 @@ class _BasicScannerScreenState
                 children: [
                   _buildUndoButton(
                     provider,
-                  ),                  const SizedBox(
-                    width: 10,
+                  ),                  const SizedBox(                    width: 10,
                   ),
                   Expanded(
                     child:
@@ -775,6 +774,27 @@ class _BasicScannerScreenState
     );
   }
 
+  Color _modeColor(
+    BasicAppMode mode,
+  ) {
+    switch (mode) {
+      case BasicAppMode.wall:
+        return const Color(
+          0xFF448AFF,
+        );
+
+      case BasicAppMode.door:
+        return const Color(
+          0xFFFF8A00,
+        );
+
+      case BasicAppMode.window:
+        return const Color(
+          0xFFD500F9,
+        );
+    }
+  }
+
   Widget _modeButton(
     BasicAppMode mode,
     IconData icon,String label,
@@ -803,7 +823,7 @@ class _BasicScannerScreenState
         decoration:
             BoxDecoration(
           color: selected
-              ? Colors.blueAccent
+              ? _modeColor(mode)
               : Colors.white10,
           borderRadius:
               BorderRadius.circular(
@@ -811,7 +831,7 @@ class _BasicScannerScreenState
           ),
           border: Border.all(
             color: selected
-                ? Colors.blueAccent
+                ? _modeColor(mode)
                 : Colors.white12,
           ),
         ),
@@ -989,7 +1009,9 @@ class _BasicScannerScreenState
         style:
             ElevatedButton.styleFrom(
           backgroundColor:
-              Colors.blueAccent,
+              _modeColor(
+            _currentMode,
+          ),
           foregroundColor:
               Colors.white,
           disabledBackgroundColor:
@@ -1414,8 +1436,7 @@ class _BasicScannerScreenState
                     ),
                     TextField(
                       controller:
-                          angleController,
-                      keyboardType:
+                          angleController,                      keyboardType:
                           const TextInputType
                               .numberWithOptions(
                         decimal: true,
