@@ -39,7 +39,8 @@ class ARScannerScreen extends StatefulWidget {
   State<ARScannerScreen> createState() => _ARScannerScreenState();
 }
 
-class _ARScannerScreenState extends State<ARScannerScreen> {
+class _ARScannerScreenState extends State<ARScannerScreen>
+    with WidgetsBindingObserver {
   AppMode _currentMode = AppMode.wall;
 
   ARPoint? _pendingFeatureStart;
@@ -76,6 +77,9 @@ class _ARScannerScreenState extends State<ARScannerScreen> {
   void initState() {
     super.initState();
 
+    WidgetsBinding.instance
+        .addObserver(this);
+
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
 
@@ -111,7 +115,52 @@ class _ARScannerScreenState extends State<ARScannerScreen> {
   }
 
   @override
+  void didChangeAppLifecycleState(
+    AppLifecycleState state,
+  ) {
+    if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
+      _arScannerAdapter
+          .setTrackingStatus(false);
+
+      _pendingFeatureStart = null;
+      _pendingFeatureMode = null;
+
+      if (mounted) {
+        context
+            .read<ScannerProvider>()
+            .updateTrackingStatus(false);
+      }
+
+      return;
+    }
+
+    if (state == AppLifecycleState.resumed) {
+      final sessionAvailable =
+          _arSessionManager != null &&
+              _arObjectManager != null;
+
+      _arScannerAdapter
+          .setTrackingStatus(
+        sessionAvailable,
+      );
+
+      if (mounted) {
+        context
+            .read<ScannerProvider>()
+            .updateTrackingStatus(
+              sessionAvailable,
+            );
+      }
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance
+        .removeObserver(this);
+
     _arScannerAdapter.dispose();
 
     _arSessionManager = null;
@@ -249,8 +298,7 @@ class _ARScannerScreenState extends State<ARScannerScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Chip(
-                  avatar: const Icon(
-                    Icons.meeting_room,
+                  avatar: const Icon(                    Icons.meeting_room,
                     size: 16,
                     color: Colors.white,
                   ),
@@ -550,8 +598,7 @@ class _ARScannerScreenState extends State<ARScannerScreen> {
   ) {
     final isSelected = _currentMode == mode;
 
-    return ChoiceChip(
-      avatar: Icon(
+    return ChoiceChip(      avatar: Icon(
         icon,
         size: 18,
         color: isSelected
