@@ -717,8 +717,7 @@ class _BasicScannerScreenState
                 children: [
                   _buildUndoButton(
                     provider,
-                  ),
-                  const SizedBox(
+                  ),                  const SizedBox(
                     width: 10,
                   ),
                   Expanded(
@@ -1231,21 +1230,47 @@ class _BasicScannerScreenState
               ? FeatureType.door
               : FeatureType.window;
 
-      provider.addFeatureToCurrentRoom(
+      final width =
+          measurement.featureWidth;
+
+      if (width == null) {
+        _scannerAdapter
+            .cancelPendingMeasurement();
+
+        _showValidationError(
+          'Ingresá el ancho de la abertura.',
+        );
+
+        return;
+      }
+
+      final result =
+          provider
+              .addFeatureToCurrentRoom(
         featureType,
         candidate.toARPoint(),
+        widthMeters:
+            width,
       );
 
+      // Una abertura no desplaza la última esquina del contorno.
       _scannerAdapter
-          .commitPendingPoint(
-        candidate,
-      );
+          .cancelPendingMeasurement();
+
+      if (!result.isValid) {
+        _showValidationError(
+          result.errorMessage ??
+              'No se pudo asociar la abertura a una pared.',
+        );
+
+        return;
+      }
 
       _showMessage(
         featureType ==
                 FeatureType.door
-            ? 'Puerta ubicada correctamente.'
-            : 'Ventana ubicada correctamente.',
+            ? 'Puerta de ${width.toStringAsFixed(2)} m ajustada a la pared.'
+            : 'Ventana de ${width.toStringAsFixed(2)} m ajustada a la pared.',
       );
     } catch (error) {
       _scannerAdapter
@@ -1276,8 +1301,18 @@ class _BasicScannerScreenState
       text: '90',
     );
 
+    final featureWidthController =
+        TextEditingController(
+      text:
+          _currentMode ==
+                  BasicAppMode.door
+              ? '0,80'
+              : '1,00',
+    );
+
     double? distanceError;
     double? angleError;
+    double? featureWidthError;
 
     return showDialog<_BasicMeasurement>(
       context: context,
@@ -1401,12 +1436,48 @@ class _BasicScannerScreenState
                         errorText:
                             angleError !=
                                     null
-                                ? 'Ingresá una dirección válida'
-                                : null,
+                                ? 'Ingresá una dirección válida'                                : null,
                         border:
                             const OutlineInputBorder(),
                       ),
                     ),
+                    if (featureMode) ...[
+                      const SizedBox(
+                        height: 16,
+                      ),
+                      TextField(
+                        controller:
+                            featureWidthController,
+                        keyboardType:
+                            const TextInputType
+                                .numberWithOptions(
+                          decimal: true,
+                        ),
+                        decoration:
+                            InputDecoration(
+                          labelText:
+                              _currentMode ==
+                                      BasicAppMode.door
+                                  ? 'Ancho de la puerta'
+                                  : 'Ancho de la ventana',
+                          hintText:
+                              'Ejemplo: 1,20',
+                          suffixText:
+                              'metros',
+                          prefixIcon:
+                              const Icon(
+                            Icons.width_normal,
+                          ),
+                          errorText:
+                              featureWidthError !=
+                                      null
+                                  ? 'Ingresá un ancho mínimo de 0,20 m'
+                                  : null,
+                          border:
+                              const OutlineInputBorder(),
+                        ),
+                      ),
+                    ],
                     const SizedBox(
                       height: 12,
                     ),
@@ -1507,6 +1578,14 @@ class _BasicScannerScreenState
                           .text,
                     );
 
+                    final featureWidth =
+                        featureMode
+                            ? _parseNumber(
+                                featureWidthController
+                                    .text,
+                              )
+                            : null;
+
                     setDialogState(() {
                       distanceError =
                           distance == null ||
@@ -1518,11 +1597,25 @@ class _BasicScannerScreenState
                           angle == null
                           ? 1
                           : null;
+
+                      featureWidthError =
+                          featureMode &&
+                                  (featureWidth ==
+                                          null ||
+                                      featureWidth <
+                                          0.20)
+                              ? 1
+                              : null;
                     });
 
                     if (distance == null ||
                         distance <= 0 ||
-                        angle == null) {
+                        angle == null ||
+                        (featureMode &&
+                            (featureWidth ==
+                                    null ||
+                                featureWidth <
+                                    0.20))) {
                       return;
                     }
 
@@ -1533,6 +1626,8 @@ class _BasicScannerScreenState
                             distance,
                         angle:
                             angle,
+                        featureWidth:
+                            featureWidth,
                       ),
                     );
                   },
@@ -1742,10 +1837,12 @@ class _BasicScannerScreenState
 class _BasicMeasurement {
   final double distance;
   final double angle;
+  final double? featureWidth;
 
   const _BasicMeasurement({
     required this.distance,
     required this.angle,
+    this.featureWidth,
   });
 }
 
