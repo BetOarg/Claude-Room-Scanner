@@ -297,8 +297,7 @@ class _MeasurementEditorScreenState
         padding:
             const EdgeInsets.all(
           16,
-        ),
-        child: Row(
+        ),        child: Row(
           children: [
             Expanded(
               child: _metric(
@@ -597,8 +596,7 @@ class _MeasurementEditorScreenState
                   },
                   child:
                       const Text(
-                    'Cancelar',
-                  ),
+                    'Cancelar',                  ),
                 ),
                 FilledButton.icon(
                   onPressed: () {
@@ -630,10 +628,19 @@ class _MeasurementEditorScreenState
       },
     );
 
-    controller.dispose();
-
     if (newLength == null ||
         !mounted) {
+      return;
+    }
+
+    // El Future de showDialog se completa al ejecutar Navigator.pop,
+    // aunque la ruta todavía puede estar animando su salida.
+    // Esperamos la transición antes de notificar al provider.
+    await Future<void>.delayed(
+      kThemeAnimationDuration,
+    );
+
+    if (!mounted) {
       return;
     }
 
