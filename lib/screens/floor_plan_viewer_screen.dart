@@ -24,30 +24,34 @@ class _FloorPlanViewerScreenState
   double _scale = 1.0;
   double _padding = 20.0;
 
+  // ===========================================================================
+  // TRANSFORMACIÓN PLANO ↔ PANTALLA
+  // ===========================================================================
+
   Offset _transformPoint(
-    ARPoint p,
+    ARPoint point,
   ) {
     final x =
         _padding +
-        (p.x - _minX) * _scale;
+        (point.x - _minX) * _scale;
 
     final z =
         _padding +
-        (p.z - _minZ) * _scale;
+        (point.z - _minZ) * _scale;
 
     return Offset(x, z);
   }
 
   ARPoint _inverseTransform(
-    Offset screenPos,
+    Offset screenPosition,
   ) {
     final x =
-        (screenPos.dx - _padding) /
+        (screenPosition.dx - _padding) /
                 _scale +
             _minX;
 
     final z =
-        (screenPos.dy - _padding) /
+        (screenPosition.dy - _padding) /
                 _scale +
             _minZ;
 
@@ -66,20 +70,20 @@ class _FloorPlanViewerScreenState
       return;
     }
 
-    double minX =
-        double.infinity;
-
+    double minX = double.infinity;
     double maxX =
         double.negativeInfinity;
 
-    double minZ =
-        double.infinity;
-
+    double minZ = double.infinity;
     double maxZ =
         double.negativeInfinity;
 
+    bool hasPoints = false;
+
     for (final room in rooms) {
       for (final point in room.points) {
+        hasPoints = true;
+
         if (point.x < minX) {
           minX = point.x;
         }
@@ -98,44 +102,67 @@ class _FloorPlanViewerScreenState
       }
     }
 
+    if (!hasPoints) {
+      _minX = 0.0;
+      _minZ = 0.0;
+      _scale = 1.0;
+      _padding = 20.0;
+      return;
+    }
+
     _minX = minX;
     _minZ = minZ;
 
     _padding =
-        screenSize.width * 0.1;
+        screenSize.width * 0.08;
 
     final contentWidth =
-        (maxX - minX) == 0
-            ? 1.0
-            : (maxX - minX);
+        (maxX - minX).abs();
 
     final contentHeight =
-        (maxZ - minZ) == 0
+        (maxZ - minZ).abs();
+
+    final safeWidth =
+        contentWidth <= 0.0001
             ? 1.0
-            : (maxZ - minZ);
+            : contentWidth;
+
+    final safeHeight =
+        contentHeight <= 0.0001
+            ? 1.0
+            : contentHeight;
+
+    final availableWidth =
+        screenSize.width -
+            (_padding * 2);
+
+    final availableHeight =
+        screenSize.height -
+            (_padding * 2);
 
     final widthScale =
-        (screenSize.width -
-                2 * _padding) /
-            contentWidth;
+        availableWidth / safeWidth;
 
     final heightScale =
-        (screenSize.height -
-                2 * _padding) /
-            contentHeight;
+        availableHeight / safeHeight;
 
-    _scale = widthScale
-        .clamp(
-          0.0,
-          heightScale,
-        );
+    _scale =
+        widthScale < heightScale
+            ? widthScale
+            : heightScale;
+
+    if (!_scale.isFinite ||
+        _scale <= 0) {
+      _scale = 1.0;
+    }
   }
 
   String? _getRoomAtPosition(
     ARPoint point,
     List<RoomModel> rooms,
   ) {
-    for (final room in rooms) {
+    for (final room
+        in rooms.reversed) {
       if (GeometryService
           .isPointInPolygon(
         point,
@@ -148,11 +175,12 @@ class _FloorPlanViewerScreenState
     return null;
   }
 
-  // ---------------------------------------------------------------------------
+  // ===========================================================================
   // EDITOR DE MEDIDAS
-  // ---------------------------------------------------------------------------
+  // ===========================================================================
 
-  Future<void> _openMeasurementEditor({
+  Future<void>
+      _openMeasurementEditor({
     String? roomId,
   }) async {
     if (!mounted) {
@@ -169,6 +197,99 @@ class _FloorPlanViewerScreenState
     );
   }
 
+  // ===========================================================================
+  // ORGANIZACIÓN AUTOMÁTICA
+  // ===========================================================================
+
+  Future<void> _organizeRooms() async {
+    final provider =
+        context.read<
+            FloorPlanProvider>();
+
+    if (provider.completedRooms.length <=
+        1) {
+      _showMessage(
+        'No hay suficientes ambientes para organizar.',
+      );
+      return;
+    }
+
+    final confirmed =
+        await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Row(
+            children: [
+              Icon(
+                Icons.grid_view_rounded,
+              ),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Organizar ambientes',
+                ),
+              ),
+            ],
+          ),
+          content: const Text(
+            'Los ambientes se distribuirán automáticamente '
+            'uno junto a otro, manteniendo intactas sus '
+            'medidas, superficies, puertas y ventanas.\n\n'
+            'Esta operación modifica únicamente su posición '
+            'en el plano general.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(
+                  dialogContext,
+                  false,
+                );
+              },
+              child: const Text(
+                'Cancelar',
+              ),
+            ),
+            FilledButton.icon(
+              onPressed: () {
+                Navigator.pop(
+                  dialogContext,
+                  true,
+                );
+              },
+              icon: const Icon(
+                Icons.auto_awesome,
+              ),
+              label: const Text(
+                'Organizar',
+              ),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true ||
+        !mounted) {
+      return;
+    }
+
+    await provider.autoArrangeRooms();
+
+    if (!mounted) {
+      return;
+    }
+
+    _showMessage(
+      'Ambientes organizados correctamente.',
+    );
+  }
+
+  // ===========================================================================
+  // BUILD
+  // ===========================================================================
+
   @override
   Widget build(
     BuildContext context,
@@ -180,9 +301,15 @@ class _FloorPlanViewerScreenState
         ),
         centerTitle: true,
         actions: [
-          // -----------------------------------------------------------------
-          // EDITAR MEDIDAS
-          // -----------------------------------------------------------------
+          IconButton(
+            icon: const Icon(
+              Icons.grid_view_rounded,
+            ),
+            tooltip:
+                'Organizar ambientes',
+            onPressed:
+                _organizeRooms,
+          ),
           IconButton(
             icon: const Icon(
               Icons.straighten_outlined,
@@ -192,114 +319,91 @@ class _FloorPlanViewerScreenState
             onPressed: () =>
                 _openMeasurementEditor(),
           ),
+          PopupMenuButton<
+              _FloorPlanAction>(
+            tooltip: 'Más opciones',
+            onSelected: (action) {
+              switch (action) {
+                case _FloorPlanAction
+                      .importJson:
+                  _importJson();
+                  break;
 
-          // -----------------------------------------------------------------
-          // IMPORTAR
-          // -----------------------------------------------------------------
-          IconButton(
-            icon: const Icon(
-              Icons.file_upload,
-            ),
-            tooltip:
-                'Importar Plano',
-            onPressed: () async {
-              final provider =
-                  context.read<
-                      FloorPlanProvider>();
+                case _FloorPlanAction
+                      .shareJson:
+                  _shareJson();
+                  break;
 
-              final success =
-                  await ImportExportService
-                      .importFromJson(
-                provider,
-              );
-
-              if (!context.mounted) {
-                return;
+                case _FloorPlanAction
+                      .exportPdf:
+                  _exportPdf();
+                  break;
               }
-
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    success
-                        ? 'Plano importado con éxito'
-                        : 'Error o importación cancelada',
+            },
+            itemBuilder: (context) {
+              return const [
+                PopupMenuItem(
+                  value:
+                      _FloorPlanAction
+                          .importJson,
+                  child: ListTile(
+                    dense: true,
+                    leading: Icon(
+                      Icons.file_upload,
+                    ),
+                    title: Text(
+                      'Importar plano',
+                    ),
                   ),
-                  backgroundColor:
-                      success
-                          ? Colors.green
-                          : Colors.orange,
                 ),
-              );
-            },
-          ),
-
-          // -----------------------------------------------------------------
-          // COMPARTIR JSON
-          // -----------------------------------------------------------------
-          IconButton(
-            icon: const Icon(
-              Icons.share,
-            ),
-            tooltip:
-                'Compartir JSON',
-            onPressed: () async {
-              final provider =
-                  context.read<
-                      FloorPlanProvider>();
-
-              await ImportExportService
-                  .exportToJson(
-                provider.completedRooms,
-                provider.projectName,
-              );
-            },
-          ),
-
-          // -----------------------------------------------------------------
-          // EXPORTAR PDF
-          // -----------------------------------------------------------------
-          IconButton(
-            icon: const Icon(
-              Icons.picture_as_pdf,
-            ),
-            tooltip:
-                'Exportar PDF',
-            onPressed: () async {
-              final provider =
-                  context.read<
-                      FloorPlanProvider>();
-
-              await ImportExportService
-                  .exportToPdf(
-                provider.completedRooms,
-                provider.projectName,
-              );
+                PopupMenuItem(
+                  value:
+                      _FloorPlanAction
+                          .shareJson,
+                  child: ListTile(
+                    dense: true,
+                    leading: Icon(
+                      Icons.share,
+                    ),
+                    title: Text(
+                      'Compartir JSON',
+                    ),
+                  ),
+                ),
+                PopupMenuItem(
+                  value:
+                      _FloorPlanAction
+                          .exportPdf,
+                  child: ListTile(
+                    dense: true,
+                    leading: Icon(
+                      Icons.picture_as_pdf,
+                    ),
+                    title: Text(
+                      'Exportar PDF',
+                    ),
+                  ),
+                ),
+              ];
             },
           ),
         ],
       ),
 
-      // ---------------------------------------------------------------------
-      // LISTA DE AMBIENTES
-      // ---------------------------------------------------------------------
       floatingActionButton:
-          FloatingActionButton(
+          FloatingActionButton.extended(
         tooltip:
             'Ambientes registrados',
-        onPressed: () =>
-            _showRoomListDialog(
-          context,
+        onPressed:
+            _showRoomListDialog,
+        icon: const Icon(
+          Icons.meeting_room_outlined,
         ),
-        child: const Icon(
-          Icons.edit_note,
+        label: const Text(
+          'Ambientes',
         ),
       ),
 
-      // ---------------------------------------------------------------------
-      // PLANO
-      // ---------------------------------------------------------------------
       body: Consumer<
           FloorPlanProvider>(
         builder: (
@@ -311,11 +415,7 @@ class _FloorPlanViewerScreenState
               provider.completedRooms;
 
           if (rooms.isEmpty) {
-            return const Center(
-              child: Text(
-                'No hay ambientes escaneados aún.',
-              ),
-            );
+            return const _EmptyPlanView();
           }
 
           return LayoutBuilder(
@@ -323,68 +423,120 @@ class _FloorPlanViewerScreenState
               context,
               constraints,
             ) {
+              final size =
+                  constraints.biggest;
+
               _calculateTransform(
-                constraints.biggest,
+                size,
                 rooms,
               );
 
-              return InteractiveViewer(
-                boundaryMargin:
-                    const EdgeInsets.all(
-                  100,
-                ),
-                minScale: 0.1,
-                maxScale: 4.0,
-                child: GestureDetector(
-                  onTapUp: (
-                    details,
-                  ) {
-                    final localOffset =
-                        details.localPosition;
+              return Stack(
+                children: [
+                  InteractiveViewer(
+                    constrained: true,
+                    boundaryMargin:
+                        const EdgeInsets.all(
+                      200,
+                    ),
+                    minScale: 0.2,
+                    maxScale: 6.0,
+                    child:
+                        GestureDetector(
+                      behavior:
+                          HitTestBehavior
+                              .opaque,
+                      onTapUp: (
+                        details,
+                      ) {
+                        final planePoint =
+                            _inverseTransform(
+                          details
+                              .localPosition,
+                        );
 
-                    final planePoint =
-                        _inverseTransform(
-                      localOffset,
-                    );
+                        final roomId =
+                            _getRoomAtPosition(
+                          planePoint,
+                          rooms,
+                        );
 
-                    final roomId =
-                        _getRoomAtPosition(
-                      planePoint,
-                      rooms,
-                    );
+                        if (roomId ==
+                            null) {
+                          _showMessage(
+                            'Tocá dentro de un ambiente para '
+                            'añadir una puerta o ventana.',
+                          );
+                          return;
+                        }
 
-                    if (roomId != null) {
-                      _showAddFeatureMenu(
-                        context,
-                        roomId,
-                        planePoint,
-                      );
-                    } else {
-                      ScaffoldMessenger.of(
-                        context,
-                      ).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                            'Toca dentro de un ambiente para añadir puertas o ventanas',
-                          ),
-                          duration:
-                              Duration(
-                            seconds: 2,
+                        _showAddFeatureMenu(
+                          roomId:
+                              roomId,
+                          location:
+                              planePoint,
+                        );
+                      },
+                      child:
+                          SizedBox.expand(
+                        child:
+                            CustomPaint(
+                          painter:
+                              FloorPlanPainter(
+                            rooms:
+                                rooms,
+                            transform:
+                                _transformPoint,
                           ),
                         ),
-                      );
-                    }
-                  },
-                  child: CustomPaint(
-                    size: Size.infinite,
-                    painter:
-                        FloorPlanPainter(
-                      rooms: rooms,
-                      transform:
-                          _transformPoint,
+                      ),
                     ),
                   ),
-                ),
+
+                  Positioned(
+                    left: 12,
+                    top: 12,
+                    child:
+                        IgnorePointer(
+                      child: Container(
+                        padding:
+                            const EdgeInsets
+                                .symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        decoration:
+                            BoxDecoration(
+                          color: Colors
+                              .black
+                              .withOpacity(
+                            0.72,
+                          ),
+                          borderRadius:
+                              BorderRadius
+                                  .circular(
+                            12,
+                          ),
+                        ),
+                        child: Text(
+                          '${rooms.length} '
+                          '${rooms.length == 1 ? 'ambiente' : 'ambientes'}'
+                          ' · '
+                          '${provider.totalProjectArea.toStringAsFixed(2)} m²',
+                          style:
+                              const TextStyle(
+                            color:
+                                Colors.white,
+                            fontWeight:
+                                FontWeight
+                                    .w600,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               );
             },
           );
@@ -393,112 +545,177 @@ class _FloorPlanViewerScreenState
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // PUERTAS / VENTANAS
-  // ---------------------------------------------------------------------------
+  // ===========================================================================
+  // IMPORTAR / EXPORTAR
+  // ===========================================================================
 
-  void _showAddFeatureMenu(
-    BuildContext context,
-    String roomId,
-    ARPoint location,
-  ) {
-    showModalBottomSheet(
-      context: context,
-      builder: (context) {
-        return Column(
-          mainAxisSize:
-              MainAxisSize.min,
-          children: [
-            const ListTile(
-              title: Text(
-                'Agregar elemento a esta habitación',
-              ),
-              leading: Icon(
-                Icons.add_location_alt,
-              ),
-            ),
-            ListTile(
-              leading: const Icon(
-                Icons.door_front_door,
-                color: Colors.red,
-              ),
-              title: const Text(
-                'Puerta',
-              ),
-              onTap: () {
-                Navigator.pop(
-                  context,
-                );
+  Future<void> _importJson() async {
+    final provider =
+        context.read<
+            FloorPlanProvider>();
 
-                final endPoint =
-                    ARPoint(
-                  x: location.x + 0.8,
-                  y: location.y,
-                  z: location.z,
-                );
+    final success =
+        await ImportExportService
+            .importFromJson(
+      provider,
+    );
 
-                context
-                    .read<
-                        FloorPlanProvider>()
-                    .addFeatureToRoom(
-                      roomId,
-                      FeatureType.door,
-                      location,
-                      endPoint,
-                    );
-              },
-            ),
-            ListTile(
-              leading: const Icon(
-                Icons.window,
-                color: Colors.blue,
-              ),
-              title: const Text(
-                'Ventana',
-              ),
-              onTap: () {
-                Navigator.pop(
-                  context,
-                );
+    if (!mounted) {
+      return;
+    }
 
-                final endPoint =
-                    ARPoint(
-                  x: location.x + 1.0,
-                  y: location.y,
-                  z: location.z,
-                );
-
-                context
-                    .read<
-                        FloorPlanProvider>()
-                    .addFeatureToRoom(
-                      roomId,
-                      FeatureType.window,
-                      location,
-                      endPoint,
-                    );
-              },
-            ),
-            const SizedBox(
-              height: 8,
-            ),
-          ],
-        );
-      },
+    _showMessage(
+      success
+          ? 'Plano importado correctamente.'
+          : 'Importación cancelada o no válida.',
+      error: !success,
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // LISTA DE AMBIENTES
-  // ---------------------------------------------------------------------------
+  Future<void> _shareJson() async {
+    final provider =
+        context.read<
+            FloorPlanProvider>();
 
-  void _showRoomListDialog(
-    BuildContext context,
-  ) {
-    showModalBottomSheet(
+    await ImportExportService
+        .exportToJson(
+      provider.completedRooms,
+      provider.projectName,
+    );
+  }
+
+  Future<void> _exportPdf() async {
+    final provider =
+        context.read<
+            FloorPlanProvider>();
+
+    await ImportExportService
+        .exportToPdf(
+      provider.completedRooms,
+      provider.projectName,
+    );
+  }
+
+  // ===========================================================================
+  // PUERTAS / VENTANAS
+  // ===========================================================================
+
+  Future<void>
+      _showAddFeatureMenu({
+    required String roomId,
+    required ARPoint location,
+  }) async {
+    final selected =
+        await showModalBottomSheet<
+            FeatureType>(
+      context: context,
+      builder: (
+        bottomSheetContext,
+      ) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize:
+                MainAxisSize.min,
+            children: [
+              const ListTile(
+                leading: Icon(
+                  Icons
+                      .add_location_alt,
+                ),
+                title: Text(
+                  'Agregar elemento',
+                ),
+                subtitle: Text(
+                  'Seleccioná el elemento '
+                  'que querés incorporar.',
+                ),
+              ),
+              const Divider(
+                height: 1,
+              ),
+              ListTile(
+                leading:
+                    const Icon(
+                  Icons
+                      .door_front_door,
+                  color:
+                      Colors.red,
+                ),
+                title:
+                    const Text(
+                  'Puerta',
+                ),
+                onTap: () {
+                  Navigator.pop(
+                    bottomSheetContext,
+                    FeatureType.door,
+                  );
+                },
+              ),
+              ListTile(
+                leading:
+                    const Icon(
+                  Icons.window,
+                  color:
+                      Colors.blue,
+                ),
+                title:
+                    const Text(
+                  'Ventana',
+                ),
+                onTap: () {
+                  Navigator.pop(
+                    bottomSheetContext,
+                    FeatureType.window,
+                  );
+                },
+              ),
+              const SizedBox(
+                height: 8,
+              ),
+            ],
+          ),
+        );
+      },
+    );
+
+    if (selected == null ||
+        !mounted) {
+      return;
+    }
+
+    final width =
+        selected ==
+                FeatureType.door
+            ? 0.8
+            : 1.0;
+
+    final endPoint = ARPoint(
+      x: location.x + width,
+      y: location.y,
+      z: location.z,
+    );
+
+    await context
+        .read<FloorPlanProvider>()
+        .addFeatureToRoom(
+          roomId,
+          selected,
+          location,
+          endPoint,
+        );
+  }
+
+    Future<void>
+      _showRoomListDialog() async {
+    final action =
+        await showModalBottomSheet<
+            _RoomListAction>(
       context: context,
       isScrollControlled: true,
-      builder: (context) {
+      builder: (
+        bottomSheetContext,
+      ) {
         return Consumer<
             FloorPlanProvider>(
           builder: (
@@ -506,135 +723,284 @@ class _FloorPlanViewerScreenState
             provider,
             child,
           ) {
-            return Padding(
-              padding:
-                  const EdgeInsets.all(
-                16.0,
-              ),
-              child: Column(
-                mainAxisSize:
-                    MainAxisSize.min,
-                crossAxisAlignment:
-                    CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Ambientes registrados',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight:
-                          FontWeight.bold,
+            final rooms =
+                provider.completedRooms;
+
+            return SafeArea(
+              child: Padding(
+                padding:
+                    const EdgeInsets
+                        .fromLTRB(
+                  16,
+                  16,
+                  16,
+                  24,
+                ),
+                child: Column(
+                  mainAxisSize:
+                      MainAxisSize.min,
+                  crossAxisAlignment:
+                      CrossAxisAlignment
+                          .start,
+                  children: [
+                    Row(
+                      children: [
+                        const Expanded(
+                          child: Text(
+                            'Ambientes registrados',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight:
+                                  FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: 'Cerrar',
+                          onPressed: () {
+                            Navigator.pop(
+                              bottomSheetContext,
+                            );
+                          },
+                          icon: const Icon(
+                            Icons.close,
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                  const SizedBox(
-                    height: 12,
-                  ),
-                  if (provider
-                      .completedRooms
-                      .isEmpty)
-                    const Center(
-                      child: Text(
-                        'No hay ambientes aún.',
-                      ),
-                    )
-                  else
-                    ListView.builder(
-                      shrinkWrap: true,
-                      physics:
-                          const NeverScrollableScrollPhysics(),
-                      itemCount: provider
-                          .completedRooms
-                          .length,
-                      itemBuilder:
-                          (
-                        context,
-                        index,
-                      ) {
-                        final room =
-                            provider
-                                .completedRooms[
-                          index
-                        ];
+                    const SizedBox(
+                      height: 8,
+                    ),
 
-                        final summary =
-                            provider
-                                .roomSummaries[
-                          index
-                        ];
+                    if (rooms.isEmpty)
+                      const Padding(
+                        padding:
+                            EdgeInsets.symmetric(
+                          vertical: 32,
+                        ),
+                        child: Center(
+                          child: Text(
+                            'No hay ambientes aún.',
+                          ),
+                        ),
+                      )
+                    else
+                      Flexible(
+                        child:
+                            ListView.separated(
+                          shrinkWrap: true,
+                          itemCount:
+                              rooms.length,
+                          separatorBuilder:
+                              (
+                            context,
+                            index,
+                          ) =>
+                                  const Divider(
+                            height: 1,
+                          ),
+                          itemBuilder:
+                              (
+                            context,
+                            index,
+                          ) {
+                            final room =
+                                rooms[index];
 
-                        return ListTile(
-                          leading:
-                              const Icon(
-                            Icons.house,
-                          ),
-                          title: Text(
-                            room.name,
-                          ),
-                          subtitle:
-                              Text(
-                            'Área: ${summary['area']} m² · ${room.points.length} pts · ${room.features.length} elementos',
-                          ),
-                          trailing:
-                              Row(
-                            mainAxisSize:
-                                MainAxisSize.min,
-                            children: [
-                              IconButton(
-                                tooltip:
-                                    'Editar medidas',
-                                icon:
-                                    const Icon(
-                                  Icons
-                                      .straighten_outlined,
+                            final summary =
+                                provider
+                                    .roomSummaries[
+                                  index
+                                ];
+
+                            return ListTile(
+                              contentPadding:
+                                  EdgeInsets.zero,
+                              leading:
+                                  CircleAvatar(
+                                child: Text(
+                                  '${index + 1}',
                                 ),
-                                onPressed:
-                                    () {
+                              ),
+                              title: Text(
+                                room.name,
+                              ),
+                              subtitle: Text(
+                                '${summary['area']} m²'
+                                ' · '
+                                '${summary['perimeter']} m perímetro'
+                                ' · '
+                                '${room.points.length} esquinas',
+                              ),
+                              trailing:
+                                  PopupMenuButton<
+                                      _RoomListActionType>(
+                                tooltip:
+                                    'Acciones',
+                                onSelected:
+                                    (
+                                  type,
+                                ) {
                                   Navigator.pop(
-                                    context,
-                                  );
-
-                                  _openMeasurementEditor(
-                                    roomId:
-                                        room.id,
+                                    bottomSheetContext,
+                                    _RoomListAction(
+                                      type: type,
+                                      roomId:
+                                          room.id,
+                                    ),
                                   );
                                 },
-                              ),
-                              IconButton(
-                                tooltip:
-                                    'Renombrar',
-                                icon:
-                                    const Icon(
-                                  Icons.edit,
-                                ),
-                                onPressed:
-                                    () =>
-                                        _editRoomName(
+                                itemBuilder:
+                                    (
                                   context,
-                                  room,
-                                ),
+                                ) {
+                                  return const [
+                                    PopupMenuItem(
+                                      value:
+                                          _RoomListActionType
+                                              .editMeasurements,
+                                      child:
+                                          ListTile(
+                                        dense: true,
+                                        leading:
+                                            Icon(
+                                          Icons
+                                              .straighten_outlined,
+                                        ),
+                                        title:
+                                            Text(
+                                          'Editar medidas',
+                                        ),
+                                      ),
+                                    ),
+                                    PopupMenuItem(
+                                      value:
+                                          _RoomListActionType
+                                              .rename,
+                                      child:
+                                          ListTile(
+                                        dense: true,
+                                        leading:
+                                            Icon(
+                                          Icons
+                                              .edit_outlined,
+                                        ),
+                                        title:
+                                            Text(
+                                          'Renombrar',
+                                        ),
+                                      ),
+                                    ),
+                                  ];
+                                },
                               ),
-                            ],
+                            );
+                          },
+                        ),
+                      ),
+
+                    if (rooms.length >
+                        1) ...[
+                      const SizedBox(
+                        height: 12,
+                      ),
+                      SizedBox(
+                        width:
+                            double.infinity,
+                        child:
+                            OutlinedButton.icon(
+                          onPressed: () {
+                            Navigator.pop(
+                              bottomSheetContext,
+                              const _RoomListAction(
+                                type:
+                                    _RoomListActionType
+                                        .organize,
+                              ),
+                            );
+                          },
+                          icon: const Icon(
+                            Icons
+                                .grid_view_rounded,
                           ),
-                        );
-                      },
-                    ),
-                  const SizedBox(
-                    height: 16,
-                  ),
-                ],
+                          label: const Text(
+                            'Organizar ambientes',
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
               ),
             );
           },
         );
       },
     );
+
+    if (action == null ||
+        !mounted) {
+      return;
+    }
+
+    switch (action.type) {
+      case _RoomListActionType
+            .editMeasurements:
+        await _openMeasurementEditor(
+          roomId:
+              action.roomId,
+        );
+        break;
+
+      case _RoomListActionType
+            .rename:
+        final room =
+            _findRoom(
+          action.roomId,
+        );
+
+        if (room != null) {
+          await _editRoomName(
+            room,
+          );
+        }
+        break;
+
+      case _RoomListActionType
+            .organize:
+        await _organizeRooms();
+        break;
+    }
   }
 
-  // ---------------------------------------------------------------------------
+  RoomModel? _findRoom(
+    String? roomId,
+  ) {
+    if (roomId == null) {
+      return null;
+    }
+
+    final rooms =
+        context
+            .read<
+                FloorPlanProvider>()
+            .completedRooms;
+
+    for (final room in rooms) {
+      if (room.id ==
+          roomId) {
+        return room;
+      }
+    }
+
+    return null;
+  }
+
+  // ===========================================================================
   // RENOMBRAR AMBIENTE
-  // ---------------------------------------------------------------------------
+  // ===========================================================================
 
   Future<void> _editRoomName(
-    BuildContext context,
     RoomModel room,
   ) async {
     final controller =
@@ -642,65 +1008,187 @@ class _FloorPlanViewerScreenState
       text: room.name,
     );
 
-    await showDialog(
+    final newName =
+        await showDialog<String>(
       context: context,
-      builder: (context) =>
-          AlertDialog(
-        title: const Text(
-          'Renombrar Ambiente',
-        ),
-        content: TextField(
-          controller:
-              controller,
-          autofocus: true,
-          decoration:
-              const InputDecoration(
-            hintText:
-                'Nuevo nombre',
-            border:
-                OutlineInputBorder(),
+      builder: (
+        dialogContext,
+      ) {
+        return AlertDialog(
+          title: const Text(
+            'Renombrar ambiente',
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () =>
-                Navigator.pop(
-              context,
+          content: TextField(
+            controller:
+                controller,
+            autofocus: true,
+            textCapitalization:
+                TextCapitalization
+                    .sentences,
+            decoration:
+                const InputDecoration(
+              labelText: 'Nombre',
+              hintText:
+                  'Ej. Dormitorio principal',
+              border:
+                  OutlineInputBorder(),
             ),
-            child: const Text(
-              'Cancelar',
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              final newName =
-                  controller.text
-                      .trim();
-
-              if (newName
-                  .isNotEmpty) {
-                context
-                    .read<
-                        FloorPlanProvider>()
-                    .updateRoomName(
-                      room.id,
-                      newName,
-                    );
-              }
-
+            onSubmitted:
+                (value) {
               Navigator.pop(
-                context,
+                dialogContext,
+                value.trim(),
               );
             },
-            child: const Text(
-              'Guardar',
-            ),
           ),
-        ],
-      ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(
+                  dialogContext,
+                );
+              },
+              child: const Text(
+                'Cancelar',
+              ),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.pop(
+                  dialogContext,
+                  controller.text
+                      .trim(),
+                );
+              },
+              child: const Text(
+                'Guardar',
+              ),
+            ),
+          ],
+        );
+      },
     );
 
     controller.dispose();
+
+    if (newName == null ||
+        newName.trim().isEmpty ||
+        !mounted) {
+      return;
+    }
+
+    await context
+        .read<FloorPlanProvider>()
+        .updateRoomName(
+          room.id,
+          newName.trim(),
+        );
+  }
+
+  // ===========================================================================
+  // MENSAJES
+  // ===========================================================================
+
+  void _showMessage(
+    String message, {
+    bool error = false,
+  }) {
+    if (!mounted) {
+      return;
+    }
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          behavior:
+              SnackBarBehavior.floating,
+          backgroundColor:
+              error
+                  ? Colors.red.shade700
+                  : null,
+          content: Text(
+            message,
+          ),
+        ),
+      );
+  }
+}
+
+// =============================================================================
+// ACCIONES
+// =============================================================================
+
+enum _FloorPlanAction {
+  importJson,
+  shareJson,
+  exportPdf,
+}
+
+enum _RoomListActionType {
+  editMeasurements,
+  rename,
+  organize,
+}
+
+class _RoomListAction {
+  final _RoomListActionType type;
+
+  final String? roomId;
+
+  const _RoomListAction({
+    required this.type,
+    this.roomId,
+  });
+}
+
+class _EmptyPlanView extends StatelessWidget {
+  const _EmptyPlanView();
+
+  @override
+  Widget build(
+    BuildContext context,
+  ) {
+    return const Center(
+      child: Padding(
+        padding: EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize:
+              MainAxisSize.min,
+          children: [
+            Icon(
+              Icons
+                  .architecture_outlined,
+              size: 72,
+              color: Colors.black38,
+            ),
+            SizedBox(
+              height: 16,
+            ),
+            Text(
+              'No hay ambientes escaneados',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight:
+                    FontWeight.bold,
+              ),
+            ),
+            SizedBox(
+              height: 8,
+            ),
+            Text(
+              'Completá un escaneo para visualizar '
+              'el plano general.',
+              textAlign:
+                  TextAlign.center,
+              style: TextStyle(
+                color: Colors.black54,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -736,154 +1224,301 @@ class FloorPlanPainter
               Colors.blueAccent
           ..strokeWidth = 3.0
           ..style =
-              PaintingStyle.stroke;
+              PaintingStyle.stroke
+          ..strokeJoin =
+              StrokeJoin.round
+          ..strokeCap =
+              StrokeCap.round;
 
     final roomFill =
         Paint()
           ..color = Colors
               .blueAccent
               .withOpacity(
-            0.1,
+            0.10,
           )
+          ..style =
+              PaintingStyle.fill;
+
+    final pointPaint =
+        Paint()
+          ..color =
+              Colors.blueAccent
           ..style =
               PaintingStyle.fill;
 
     final doorPaint =
         Paint()
           ..color = Colors.red
-          ..strokeWidth = 4.0
+          ..strokeWidth = 5.0
           ..style =
-              PaintingStyle.stroke;
+              PaintingStyle.stroke
+          ..strokeCap =
+              StrokeCap.square;
 
     final windowPaint =
         Paint()
           ..color = Colors.blue
-          ..strokeWidth = 4.0
+          ..strokeWidth = 5.0
           ..style =
-              PaintingStyle.stroke;
+              PaintingStyle.stroke
+          ..strokeCap =
+              StrokeCap.square;
 
-    for (final room
-        in rooms) {
-      if (room.points.length >=
-          2) {
-        final path =
-            Path();
+    for (final room in rooms) {
+      _drawRoom(
+        canvas,
+        room,
+        wallPaint,
+        roomFill,
+        pointPaint,
+      );
 
-        final start =
-            transform(
-          room.points.first,
-        );
+      _drawRoomLabel(
+        canvas,
+        room,
+      );
 
-        path.moveTo(
-          start.dx,
-          start.dy,
-        );
+      _drawFeatures(
+        canvas,
+        room,
+        doorPaint,
+        windowPaint,
+      );
+    }
+  }
 
-        for (
-          var i = 1;
-          i < room.points.length;
-          i++
-        ) {
-          final next =
-              transform(
-            room.points[i],
-          );
+  // ===========================================================================
+  // HABITACIÓN
+  // ===========================================================================
 
-          path.lineTo(
-            next.dx,
-            next.dy,
-          );
-        }
+  void _drawRoom(
+    Canvas canvas,
+    RoomModel room,
+    Paint wallPaint,
+    Paint roomFill,
+    Paint pointPaint,
+  ) {
+    if (room.points.length < 2) {
+      return;
+    }
 
-        path.close();
+    final path = Path();
 
-        canvas.drawPath(
-          path,
-          roomFill,
-        );
+    final start =
+        transform(
+      room.points.first,
+    );
 
-        canvas.drawPath(
-          path,
-          wallPaint,
-        );
-      }
+    path.moveTo(
+      start.dx,
+      start.dy,
+    );
 
-      // -----------------------------------------------------------------------
-      // NOMBRE DEL AMBIENTE
-      // -----------------------------------------------------------------------
+    for (
+      int i = 1;
+      i < room.points.length;
+      i++
+    ) {
+      final next =
+          transform(
+        room.points[i],
+      );
 
-      if (room.points.isNotEmpty) {
-        final labelPos =
-            transform(
-          room.points.first,
-        );
+      path.lineTo(
+        next.dx,
+        next.dy,
+      );
+    }
 
-        final textSpan =
-            TextSpan(
-          text: room.name,
-          style:
-              const TextStyle(
-            color: Colors.black,
-            fontSize: 12,
-            fontWeight:
-                FontWeight.bold,
+    if (room.isClosed ||
+        room.points.length >= 3) {
+      path.close();
+    }
+
+    if (room.points.length >= 3) {
+      canvas.drawPath(
+        path,
+        roomFill,
+      );
+    }
+
+    canvas.drawPath(
+      path,
+      wallPaint,
+    );
+
+    for (final point
+        in room.points) {
+      canvas.drawCircle(
+        transform(point),
+        4.0,
+        pointPaint,
+      );
+    }
+  }
+
+  // ===========================================================================
+  // NOMBRE Y SUPERFICIE
+  // ===========================================================================
+
+  void _drawRoomLabel(
+    Canvas canvas,
+    RoomModel room,
+  ) {
+    if (room.points.isEmpty) {
+      return;
+    }
+
+    double x = 0.0;
+    double y = 0.0;
+
+    for (final point
+        in room.points) {
+      final transformed =
+          transform(point);
+
+      x += transformed.dx;
+      y += transformed.dy;
+    }
+
+    final center = Offset(
+      x / room.points.length,
+      y / room.points.length,
+    );
+
+    final area =
+        GeometryService
+            .calculateArea(
+      room.points,
+    );
+
+    final textPainter =
+        TextPainter(
+      text: TextSpan(
+        children: [
+          TextSpan(
+            text: room.name,
+            style:
+                const TextStyle(
+              color:
+                  Colors.black87,
+              fontSize: 13,
+              fontWeight:
+                  FontWeight.bold,
+            ),
           ),
-        );
+          TextSpan(
+            text:
+                '\n${area.toStringAsFixed(2)} m²',
+            style:
+                const TextStyle(
+              color:
+                  Colors.black54,
+              fontSize: 10,
+              fontWeight:
+                  FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+      textAlign:
+          TextAlign.center,
+      textDirection:
+          TextDirection.ltr,
+      maxLines: 2,
+    )..layout(
+        maxWidth: 140,
+      );
 
-        final textPainter =
-            TextPainter(
-          text: textSpan,
-          textDirection:
-              TextDirection.ltr,
-        )..layout();
+    final backgroundRect =
+        Rect.fromCenter(
+      center: center,
+      width:
+          textPainter.width + 14,
+      height:
+          textPainter.height + 10,
+    );
 
-        textPainter.paint(
-          canvas,
-          labelPos +
-              const Offset(
-                5,
-                5,
-              ),
-        );
-      }
+    final backgroundPaint =
+        Paint()
+          ..color = Colors.white
+              .withOpacity(
+            0.86,
+          )
+          ..style =
+              PaintingStyle.fill;
 
-      // -----------------------------------------------------------------------
-      // PUERTAS / VENTANAS
-      // -----------------------------------------------------------------------
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        backgroundRect,
+        const Radius.circular(
+          7,
+        ),
+      ),
+      backgroundPaint,
+    );
 
-      for (final feature
-          in room.features) {
-        final pStart =
-            transform(
-          feature.start,
-        );
+    textPainter.paint(
+      canvas,
+      Offset(
+        center.dx -
+            textPainter.width / 2,
+        center.dy -
+            textPainter.height / 2,
+      ),
+    );
+  }
 
-        final pEnd =
-            transform(
-          feature.end,
-        );
+  // ===========================================================================
+  // PUERTAS Y VENTANAS
+  // ===========================================================================
 
-        if (feature.type ==
-            FeatureType.door) {
+  void _drawFeatures(
+    Canvas canvas,
+    RoomModel room,
+    Paint doorPaint,
+    Paint windowPaint,
+  ) {
+    for (final feature
+        in room.features) {
+      final start =
+          transform(
+        feature.start,
+      );
+
+      final end =
+          transform(
+        feature.end,
+      );
+
+      switch (feature.type) {
+        case FeatureType.door:
           canvas.drawLine(
-            pStart,
-            pEnd,
+            start,
+            end,
             doorPaint,
           );
-        } else {
+          break;
+
+        case FeatureType.window:
           canvas.drawLine(
-            pStart,
-            pEnd,
+            start,
+            end,
             windowPaint,
           );
-        }
+          break;
       }
     }
   }
 
+  // ===========================================================================
+  // REPAINT
+  // ===========================================================================
+
   @override
   bool shouldRepaint(
-    covariant CustomPainter
+    covariant FloorPlanPainter
         oldDelegate,
   ) {
     return true;
