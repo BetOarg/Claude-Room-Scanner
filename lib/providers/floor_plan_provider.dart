@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/foundation.dart';
 
 import '../models/room_model.dart';
@@ -612,8 +614,7 @@ class FloorPlanProvider extends ChangeNotifier {
       room.features,
     )..add(feature);
 
-    _completedRooms[index] =
-        room.copyWith(
+    _completedRooms[index] =        room.copyWith(
       features: features,
     );
 
@@ -701,6 +702,233 @@ class FloorPlanProvider extends ChangeNotifier {
           },
         )
         .toList();
+  }
+
+  // ===========================================================================
+  // REAJUSTE DE ABERTURAS
+  // ===========================================================================
+
+  _FeatureRemapResult _remapFeatures({
+    required List<WallFeature> features,
+    required List<ARPoint> originalPoints,
+    required List<ARPoint> updatedPoints,
+  }) {
+    if (features.isEmpty) {
+      return const _FeatureRemapResult(
+        features: [],
+      );
+    }
+
+    final remapped =
+        <WallFeature>[];
+
+    for (final feature
+        in features) {
+      final midpoint =
+          ARPoint(
+        x:
+            (feature.start.x +
+                    feature.end.x) /
+                2.0,
+        y:
+            (feature.start.y +
+                    feature.end.y) /
+                2.0,
+        z:
+            (feature.start.z +
+                    feature.end.z) /
+                2.0,
+      );
+
+      int nearestWallIndex =
+          -1;
+
+      double nearestDistanceSquared =
+          double.infinity;
+
+      double originalCenterT =
+          0.0;
+
+      for (int index = 0;
+          index <
+              originalPoints.length;
+          index++) {
+        final start =
+            originalPoints[index];
+
+        final end =
+            originalPoints[
+              (index + 1) %
+                  originalPoints.length
+            ];
+
+        final dx =
+            end.x - start.x;
+
+        final dz =
+            end.z - start.z;
+
+        final lengthSquared =
+            dx * dx + dz * dz;
+
+        if (lengthSquared <=
+            0.000001) {
+          continue;
+        }
+
+        final rawT =
+            ((midpoint.x - start.x) * dx +
+                    (midpoint.z - start.z) * dz) /
+                lengthSquared;
+
+        final projectedT =
+            rawT.clamp(0.0, 1.0)
+                .toDouble();
+
+        final projectedX =
+            start.x +
+                dx * projectedT;
+
+        final projectedZ =
+            start.z +
+                dz * projectedT;
+
+        final distanceX =
+            midpoint.x -
+                projectedX;
+
+        final distanceZ =
+            midpoint.z -
+                projectedZ;
+
+        final distanceSquared =
+            distanceX * distanceX +
+                distanceZ * distanceZ;
+
+        if (distanceSquared <
+            nearestDistanceSquared) {
+          nearestDistanceSquared =
+              distanceSquared;
+
+          nearestWallIndex =
+              index;
+
+          originalCenterT =
+              projectedT;
+        }
+      }
+
+      if (nearestWallIndex < 0) {
+        return const _FeatureRemapResult(
+          errorMessage:
+              'No se pudo identificar la pared de una abertura.',
+        );
+      }
+
+      final featureWidth =
+          GeometryService
+              .calculateDistance(
+        feature.start,
+        feature.end,
+      );
+
+      final newWallStart =
+          updatedPoints[
+            nearestWallIndex
+          ];
+
+      final newWallEnd =
+          updatedPoints[
+            (nearestWallIndex + 1) %
+                updatedPoints.length
+          ];
+
+      final newDx =
+          newWallEnd.x -
+              newWallStart.x;
+
+      final newDz =
+          newWallEnd.z -
+              newWallStart.z;
+
+      final newWallLength =
+          math.sqrt(
+        newDx * newDx +
+            newDz * newDz,
+      );
+
+      if (newWallLength <=
+          0.000001) {
+        return const _FeatureRemapResult(
+          errorMessage:
+              'La edición genera una pared sin longitud.',
+        );
+      }
+
+      if (featureWidth >
+          newWallLength +
+              0.000001) {
+        return _FeatureRemapResult(
+          errorMessage:
+              'La nueva pared es más corta que una puerta o ventana '
+              'de ${featureWidth.toStringAsFixed(2)} m.',
+        );
+      }
+
+      final featureFraction =
+          featureWidth /
+              newWallLength;
+
+      final maximumStartT =
+          1.0 -
+              featureFraction;
+
+      final startT =
+          (originalCenterT -
+                  featureFraction / 2.0)
+              .clamp(
+                0.0,
+                maximumStartT,
+              )
+              .toDouble();
+
+      final endT =
+          startT +
+              featureFraction;
+
+      ARPoint pointAt(
+        double t,
+      ) {
+        return ARPoint(
+          x:
+              newWallStart.x +
+                  newDx * t,
+          y:
+              newWallStart.y +
+                  (newWallEnd.y -
+                          newWallStart.y) *
+                      t,
+          z:
+              newWallStart.z +
+                  newDz * t,
+        );
+      }
+
+      remapped.add(
+        WallFeature(
+          id: feature.id,
+          type: feature.type,
+          start:
+              pointAt(startT),
+          end:
+              pointAt(endT),
+        ),
+      );
+    }
+
+    return _FeatureRemapResult(
+      features: remapped,
+    );
   }
 
   // ===========================================================================
@@ -928,10 +1156,29 @@ class FloorPlanProvider extends ChangeNotifier {
       );
     }
 
+    final remappedFeatures =
+        _remapFeatures(
+      features:
+          room.features,
+      originalPoints:
+          originalPoints,
+      updatedPoints:
+          points,
+    );
+
+    if (!remappedFeatures.isValid) {
+      return ValidationResult.invalid(
+        remappedFeatures.errorMessage ??
+            'No se pudieron reajustar las aberturas.',
+      );
+    }
+
     _completedRooms[
             resolvedRoomIndex] =
         room.copyWith(
       points: points,
+      features:
+          remappedFeatures.features,
     );
 
     notifyListeners();
@@ -957,6 +1204,19 @@ class FloorPlanProvider extends ChangeNotifier {
 
     notifyListeners();
   }
+}
+
+class _FeatureRemapResult {
+  final List<WallFeature> features;
+  final String? errorMessage;
+
+  const _FeatureRemapResult({
+    this.features = const [],
+    this.errorMessage,
+  });
+
+  bool get isValid =>
+      errorMessage == null;
 }
 
 class _RoomNormalizationResult {
