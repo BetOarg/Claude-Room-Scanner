@@ -4,8 +4,7 @@ import 'package:provider/provider.dart';
 import '../models/room_model.dart';
 import '../providers/floor_plan_provider.dart';
 
-class MeasurementEditorScreen
-    extends StatefulWidget {
+class MeasurementEditorScreen extends StatefulWidget {
   final String? roomId;
 
   const MeasurementEditorScreen({
@@ -14,49 +13,35 @@ class MeasurementEditorScreen
   });
 
   @override
-  State<MeasurementEditorScreen>
-      createState() =>
-          _MeasurementEditorScreenState();
+  State<MeasurementEditorScreen> createState() =>
+      _MeasurementEditorScreenState();
 }
 
 class _MeasurementEditorScreenState
-    extends State<
-        MeasurementEditorScreen> {
+    extends State<MeasurementEditorScreen> {
   String? _selectedRoomId;
 
   @override
   void initState() {
     super.initState();
-
-    _selectedRoomId =
-        widget.roomId;
+    _selectedRoomId = widget.roomId;
   }
 
   @override
-  Widget build(
-    BuildContext context,
-  ) {
-    final provider =
-        context.watch<
-            FloorPlanProvider>();
-
-    final rooms =
-        provider.completedRooms;
+  Widget build(BuildContext context) {
+    final provider = context.watch<FloorPlanProvider>();
+    final rooms = provider.completedRooms;
 
     if (rooms.isEmpty) {
       return Scaffold(
         appBar: AppBar(
-          title: const Text(
-            'Editar medidas',
-          ),
+          title: const Text('Editar medidas'),
         ),
         body: const Center(
           child: Padding(
-            padding:
-                EdgeInsets.all(24),
+            padding: EdgeInsets.all(24),
             child: Column(
-              mainAxisSize:
-                  MainAxisSize.min,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(
                   Icons.straighten_outlined,
@@ -65,19 +50,16 @@ class _MeasurementEditorScreenState
                 SizedBox(height: 16),
                 Text(
                   'No hay ambientes para editar.',
-                  textAlign:
-                      TextAlign.center,
+                  textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 18,
-                    fontWeight:
-                        FontWeight.bold,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
                 SizedBox(height: 8),
                 Text(
                   'Primero completá y guardá un ambiente desde el Scanner.',
-                  textAlign:
-                      TextAlign.center,
+                  textAlign: TextAlign.center,
                 ),
               ],
             ),
@@ -86,16 +68,11 @@ class _MeasurementEditorScreenState
       );
     }
 
-    final selectedRoom =
-        _resolveSelectedRoom(
-      rooms,
-    );
+    final selectedRoom = _resolveSelectedRoom(rooms);
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          'Editar medidas',
-        ),
+        title: const Text('Editar medidas'),
       ),
       body: Column(
         children: [
@@ -105,8 +82,7 @@ class _MeasurementEditorScreenState
           ),
           if (selectedRoom != null)
             Expanded(
-              child:
-                  _buildRoomEditor(
+              child: _buildRoomEditor(
                 selectedRoom,
                 provider,
               ),
@@ -120,17 +96,14 @@ class _MeasurementEditorScreenState
     List<RoomModel> rooms,
   ) {
     if (_selectedRoomId != null) {
-      for (final room
-          in rooms) {
-        if (room.id ==
-            _selectedRoomId) {
+      for (final room in rooms) {
+        if (room.id == _selectedRoomId) {
           return room;
         }
       }
     }
 
-    _selectedRoomId =
-        rooms.first.id;
+    _selectedRoomId = rooms.first.id;
 
     return rooms.first;
   }
@@ -141,48 +114,36 @@ class _MeasurementEditorScreenState
   ) {
     return Container(
       width: double.infinity,
-      padding:
-          const EdgeInsets.fromLTRB(
+      padding: const EdgeInsets.fromLTRB(
         16,
         14,
         16,
         12,
       ),
-      child: DropdownButtonFormField<
-          String>(
-        initialValue:
-            selectedRoom?.id,
-        decoration:
-            const InputDecoration(
-          labelText:
-              'Ambiente',
-          prefixIcon:
-              Icon(
+      child: DropdownButtonFormField<String>(
+        value: selectedRoom?.id,
+        decoration: const InputDecoration(
+          labelText: 'Ambiente',
+          prefixIcon: Icon(
             Icons.home_outlined,
           ),
-          border:
-              OutlineInputBorder(),
+          border: OutlineInputBorder(),
         ),
-        items:
-            rooms.map(
-          (room) {
-            return DropdownMenuItem<
-                String>(
-              value: room.id,
-              child: Text(
-                room.name,
-              ),
-            );
-          },
-        ).toList(),
+        items: rooms.map((room) {
+          return DropdownMenuItem<String>(
+            value: room.id,
+            child: Text(
+              room.name,
+            ),
+          );
+        }).toList(),
         onChanged: (value) {
           if (value == null) {
             return;
           }
 
           setState(() {
-            _selectedRoomId =
-                value;
+            _selectedRoomId = value;
           });
         },
       ),
@@ -193,18 +154,15 @@ class _MeasurementEditorScreenState
     RoomModel room,
     FloorPlanProvider provider,
   ) {
-    final area =
-        _calculateArea(room);
+    final area = _calculateArea(room);
 
-    final perimeter =
-        _calculatePerimeter(
+    final perimeter = _calculatePerimeter(
       room,
       provider,
     );
 
     return ListView(
-      padding:
-          const EdgeInsets.fromLTRB(
+      padding: const EdgeInsets.fromLTRB(
         16,
         0,
         16,
@@ -216,31 +174,23 @@ class _MeasurementEditorScreenState
           area,
           perimeter,
         ),
-        const SizedBox(
-          height: 16,
-        ),
+        const SizedBox(height: 16),
         const Text(
           'Paredes',
           style: TextStyle(
             fontSize: 20,
-            fontWeight:
-                FontWeight.bold,
+            fontWeight: FontWeight.bold,
           ),
         ),
-        const SizedBox(
-          height: 6,
-        ),
+        const SizedBox(height: 6),
         const Text(
           'Seleccioná una pared para corregir su longitud. La dirección de la pared se conserva automáticamente.',
           style: TextStyle(
-            color:
-                Colors.black54,
+            color: Colors.black54,
             height: 1.3,
           ),
         ),
-        const SizedBox(
-          height: 12,
-        ),
+        const SizedBox(height: 12),
         ...List.generate(
           room.points.length,
           (index) {
@@ -263,10 +213,7 @@ class _MeasurementEditorScreenState
     return Card(
       elevation: 0,
       child: Padding(
-        padding:
-            const EdgeInsets.all(
-          16,
-        ),
+        padding: const EdgeInsets.all(16),
         child: Row(
           children: [
             Expanded(
@@ -279,8 +226,7 @@ class _MeasurementEditorScreenState
             Container(
               width: 1,
               height: 48,
-              color:
-                  Colors.black12,
+              color: Colors.black12,
             ),
             Expanded(
               child: _metric(
@@ -292,8 +238,7 @@ class _MeasurementEditorScreenState
             Container(
               width: 1,
               height: 48,
-              color:
-                  Colors.black12,
+              color: Colors.black12,
             ),
             Expanded(
               child: _metric(
@@ -319,27 +264,19 @@ class _MeasurementEditorScreenState
           icon,
           size: 22,
         ),
-        const SizedBox(
-          height: 6,
-        ),
+        const SizedBox(height: 6),
         Text(
           value,
-          style:
-              const TextStyle(
-            fontWeight:
-                FontWeight.bold,
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
             fontSize: 15,
           ),
         ),
-        const SizedBox(
-          height: 2,
-        ),
+        const SizedBox(height: 2),
         Text(
           label,
-          style:
-              const TextStyle(
-            color:
-                Colors.black54,
+          style: const TextStyle(
+            color: Colors.black54,
             fontSize: 11,
           ),
         ),
@@ -352,28 +289,22 @@ class _MeasurementEditorScreenState
     FloorPlanProvider provider,
     int wallIndex,
   ) {
-    final length =
-        provider.wallLength(
+    final length = provider.wallLength(
       room,
       wallIndex,
     );
 
-    final startIndex =
-        wallIndex + 1;
+    final startIndex = wallIndex + 1;
 
     final endIndex =
-        ((wallIndex + 1) %
-                room.points.length) +
-            1;
+        ((wallIndex + 1) % room.points.length) + 1;
 
     return Card(
-      margin:
-          const EdgeInsets.only(
+      margin: const EdgeInsets.only(
         bottom: 10,
       ),
       child: ListTile(
-        contentPadding:
-            const EdgeInsets.symmetric(
+        contentPadding: const EdgeInsets.symmetric(
           horizontal: 16,
           vertical: 6,
         ),
@@ -384,39 +315,30 @@ class _MeasurementEditorScreenState
         ),
         title: Text(
           'Pared ${wallIndex + 1}',
-          style:
-              const TextStyle(
-            fontWeight:
-                FontWeight.bold,
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
           ),
         ),
         subtitle: Text(
           'Esquina $startIndex → Esquina $endIndex',
         ),
         trailing: Row(
-          mainAxisSize:
-              MainAxisSize.min,
+          mainAxisSize: MainAxisSize.min,
           children: [
             Text(
               '${length.toStringAsFixed(2)} m',
-              style:
-                  const TextStyle(
-                fontWeight:
-                    FontWeight.bold,
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
                 fontSize: 16,
               ),
             ),
-            const SizedBox(
-              width: 8,
-            ),
+            const SizedBox(width: 8),
             IconButton(
-              tooltip:
-                  'Editar medida',
+              tooltip: 'Editar medida',
               icon: const Icon(
                 Icons.edit_outlined,
               ),
-              onPressed: () =>
-                  _editWallLength(
+              onPressed: () => _editWallLength(
                 room,
                 provider,
                 wallIndex,
@@ -435,23 +357,18 @@ class _MeasurementEditorScreenState
     int wallIndex,
     double currentLength,
   ) async {
-    final controller =
-        TextEditingController(
-      text: currentLength
-          .toStringAsFixed(2),
+    final controller = TextEditingController(
+      text: currentLength.toStringAsFixed(2),
     );
 
     String? error;
 
-    final newLength =
-        await showDialog<double>(
+    final newLength = await showDialog<double>(
       context: context,
       barrierDismissible: false,
-      builder:
-          (dialogContext) {
+      builder: (dialogContext) {
         return StatefulBuilder(
-          builder:
-              (
+          builder: (
             context,
             setDialogState,
           ) {
@@ -459,63 +376,45 @@ class _MeasurementEditorScreenState
               title: Text(
                 'Editar pared ${wallIndex + 1}',
               ),
-              content:
-                  SingleChildScrollView(
+              content: SingleChildScrollView(
                 child: Column(
-                  mainAxisSize:
-                      MainAxisSize.min,
+                  mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment:
                       CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Medida actual: ${currentLength.toStringAsFixed(2)} m',
-                      style:
-                          const TextStyle(
-                        color:
-                            Colors.black54,
+                      'Medida actual: '
+                      '${currentLength.toStringAsFixed(2)} m',
+                      style: const TextStyle(
+                        color: Colors.black54,
                       ),
                     ),
-                    const SizedBox(
-                      height: 16,
-                    ),
+                    const SizedBox(height: 16),
                     TextField(
-                      controller:
-                          controller,
-                      autofocus:
-                          true,
+                      controller: controller,
+                      autofocus: true,
                       keyboardType:
-                          const TextInputType
-                              .numberWithOptions(
+                          const TextInputType.numberWithOptions(
                         decimal: true,
                       ),
-                      decoration:
-                          InputDecoration(
-                        labelText:
-                            'Nueva longitud',
-                        hintText:
-                            'Ejemplo: 3,25',
-                        suffixText:
-                            'metros',
-                        prefixIcon:
-                            const Icon(
+                      decoration: InputDecoration(
+                        labelText: 'Nueva longitud',
+                        hintText: 'Ejemplo: 3,25',
+                        suffixText: 'metros',
+                        prefixIcon: const Icon(
                           Icons.straighten,
                         ),
-                        errorText:
-                            error,
-                        border:
-                            const OutlineInputBorder(),
+                        errorText: error,
+                        border: const OutlineInputBorder(),
                       ),
                     ),
-                    const SizedBox(
-                      height: 12,
-                    ),
+                    const SizedBox(height: 12),
                     const Text(
-                      'La dirección de esta pared se mantiene. Solo se modifica su longitud.',
-                      style:
-                          TextStyle(
+                      'La dirección de esta pared se mantiene. '
+                      'Solo se modifica su longitud.',
+                      style: TextStyle(
                         fontSize: 12,
-                        color:
-                            Colors.black54,
+                        color: Colors.black54,
                         height: 1.3,
                       ),
                     ),
@@ -529,8 +428,7 @@ class _MeasurementEditorScreenState
                       dialogContext,
                     );
                   },
-                  child:
-                      const Text(
+                  child: const Text(
                     'Cancelar',
                   ),
                 ),
@@ -541,10 +439,8 @@ class _MeasurementEditorScreenState
                       controller.text,
                     );
 
-                    if (value ==
-                            null ||
-                        value <=
-                            0) {
+                    if (value == null ||
+                        value <= 0) {
                       setDialogState(() {
                         error =
                             'Ingresá una longitud válida mayor a 0.';
@@ -557,12 +453,10 @@ class _MeasurementEditorScreenState
                       value,
                     );
                   },
-                  icon:
-                      const Icon(
+                  icon: const Icon(
                     Icons.check,
                   ),
-                  label:
-                      const Text(
+                  label: const Text(
                     'Continuar',
                   ),
                 ),
@@ -581,12 +475,10 @@ class _MeasurementEditorScreenState
     }
 
     final result =
-        await provider
-            .updateWallLength(
+        await provider.updateWallLength(
       roomId: room.id,
       wallIndex: wallIndex,
-      lengthMeters:
-          newLength,
+      lengthMeters: newLength,
     );
 
     if (!mounted) {
@@ -610,8 +502,7 @@ class _MeasurementEditorScreenState
   double _calculateArea(
     RoomModel room,
   ) {
-    final points =
-        room.points;
+    final points = room.points;
 
     if (points.length < 3) {
       return 0.0;
@@ -623,8 +514,7 @@ class _MeasurementEditorScreenState
         i < points.length;
         i++) {
       final next =
-          (i + 1) %
-              points.length;
+          (i + 1) % points.length;
 
       area +=
           points[i].x *
@@ -645,8 +535,7 @@ class _MeasurementEditorScreenState
     for (int i = 0;
         i < room.points.length;
         i++) {
-      total +=
-          provider.wallLength(
+      total += provider.wallLength(
         room,
         i,
       );
@@ -658,29 +547,24 @@ class _MeasurementEditorScreenState
   double? _parseNumber(
     String value,
   ) {
-    var normalized =
-        value.trim();
+    var normalized = value.trim();
 
-    normalized =
-        normalized.replaceAll(
+    normalized = normalized.replaceAll(
       'm²',
       '',
     );
 
-    normalized =
-        normalized.replaceAll(
+    normalized = normalized.replaceAll(
       'm',
       '',
     );
 
-    normalized =
-        normalized.replaceAll(
+    normalized = normalized.replaceAll(
       ',',
       '.',
     );
 
-    normalized =
-        normalized.trim();
+    normalized = normalized.trim();
 
     return double.tryParse(
       normalized,
@@ -708,9 +592,7 @@ class _MeasurementEditorScreenState
                 Icons.warning_amber_rounded,
                 color: Colors.white,
               ),
-              const SizedBox(
-                width: 10,
-              ),
+              const SizedBox(width: 10),
               Expanded(
                 child: Text(
                   message,
@@ -743,9 +625,7 @@ class _MeasurementEditorScreenState
                 Icons.check_circle_outline,
                 color: Colors.white,
               ),
-              const SizedBox(
-                width: 10,
-              ),
+              const SizedBox(width: 10),
               Expanded(
                 child: Text(
                   message,
