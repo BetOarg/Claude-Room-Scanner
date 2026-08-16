@@ -297,17 +297,26 @@ class _ARScannerScreenState extends State<ARScannerScreen>
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Chip(
-                  avatar: const Icon(                    Icons.meeting_room,
+                ActionChip(
+                  tooltip:
+                      'Editar nombre del ambiente',
+                  avatar: const Icon(
+                    Icons.edit_outlined,
                     size: 16,
                     color: Colors.white,
                   ),
                   label: Text(
                     provider.currentRoom?.name ??
-                        'Nuevo Ambiente',
+                        'Nuevo ambiente',
                   ),
-                  backgroundColor: Colors.black87,
-                  labelStyle: const TextStyle(
+                  onPressed: () =>
+                      _showCustomRoomNameDialog(
+                    provider,
+                  ),
+                  backgroundColor:
+                      Colors.black87,
+                  labelStyle:
+                      const TextStyle(
                     color: Colors.white,
                   ),
                 ),
@@ -496,8 +505,7 @@ class _ARScannerScreenState extends State<ARScannerScreen>
                     Expanded(
                       child: ElevatedButton.icon(
                         onPressed: () =>
-                            _onCapturePressed(
-                          provider,
+                            _onCapturePressed(                          provider,
                         ),
                         icon: Icon(
                           _currentMode ==
@@ -577,6 +585,102 @@ class _ARScannerScreenState extends State<ARScannerScreen>
           ),
         ],
       ),
+    );
+  }
+
+  Future<void> _showCustomRoomNameDialog(
+    ScannerProvider provider,
+  ) async {
+    final controller =
+        TextEditingController(
+      text: provider.currentRoom?.name ??
+          provider.selectedType.displayName,
+    );
+
+    final name =
+        await showDialog<String>(
+      context: context,
+      builder: (
+        dialogContext,
+      ) {
+        return AlertDialog(
+          title: const Text(
+            'Nombre del ambiente',
+          ),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            textCapitalization:
+                TextCapitalization.sentences,
+            maxLength: 60,
+            decoration:
+                const InputDecoration(
+              labelText:
+                  'Destino o nombre',
+              hintText:
+                  'Ej.: Dormitorio de Ana',
+              border:
+                  OutlineInputBorder(),
+            ),
+            onSubmitted: (value) {
+              final normalized =
+                  value.trim();
+
+              if (normalized.isNotEmpty) {
+                Navigator.pop(
+                  dialogContext,
+                  normalized,
+                );
+              }
+            },
+          ),
+          actions: [
+            TextButton(
+              onPressed: () =>
+                  Navigator.pop(
+                dialogContext,
+              ),
+              child: const Text(
+                'Cancelar',
+              ),
+            ),
+            FilledButton(
+              onPressed: () {
+                final normalized =
+                    controller.text.trim();
+
+                if (normalized.isEmpty) {
+                  return;
+                }
+
+                Navigator.pop(
+                  dialogContext,
+                  normalized,
+                );
+              },
+              child: const Text(
+                'Guardar',
+              ),
+            ),
+          ],
+        );
+      },
+    );
+
+    await Future<void>.delayed(
+      kThemeAnimationDuration,
+    );
+
+    controller.dispose();
+
+    if (!mounted ||
+        name == null ||
+        name.trim().isEmpty) {
+      return;
+    }
+
+    provider.setCurrentRoomName(
+      name,
     );
   }
 
