@@ -494,6 +494,19 @@ class _BasicScannerScreenState
               ),
               _hudIconButton(
                 icon:
+                    Icons.home_work_outlined,
+                tooltip:
+                    'Tipo de ambiente',
+                onPressed: () =>
+                    _showRoomTypeSelector(
+                  provider,
+                ),
+              ),
+              const SizedBox(
+                width: 8,
+              ),
+              _hudIconButton(
+                icon:
                     Icons.map_outlined,
                 tooltip:
                     'Ver plano',
@@ -646,8 +659,105 @@ class _BasicScannerScreenState
     );
   }
 
-  Widget _hudIconButton({
-    required IconData icon,
+  Future<void> _showRoomTypeSelector(
+    ScannerProvider provider,
+  ) async {
+    final selected =
+        await showModalBottomSheet<
+            RoomType>(
+      context: context,
+      isScrollControlled: true,
+      builder: (
+        bottomSheetContext,
+      ) {
+        return SafeArea(
+          child: Padding(
+            padding:
+                const EdgeInsets.fromLTRB(
+              16,
+              16,
+              16,
+              24,
+            ),
+            child: Column(
+              mainAxisSize:
+                  MainAxisSize.min,
+              crossAxisAlignment:
+                  CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Tipo de ambiente',
+                  style:
+                      TextStyle(
+                    fontSize: 20,
+                    fontWeight:
+                        FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(
+                  height: 8,
+                ),
+                Flexible(
+                  child:
+                      ListView.builder(
+                    shrinkWrap: true,
+                    itemCount:
+                        RoomType.values.length,
+                    itemBuilder:
+                        (
+                      context,
+                      index,
+                    ) {
+                      final type =
+                          RoomType.values[
+                            index
+                          ];
+
+                      final selected =
+                          provider.selectedType ==
+                              type;
+
+                      return ListTile(
+                        leading: Icon(
+                          selected
+                              ? Icons.check_circle
+                              : Icons.circle_outlined,
+                          color:
+                              selected
+                                  ? Colors.blueAccent
+                                  : null,
+                        ),
+                        title: Text(
+                          type.displayName,
+                        ),
+                        onTap: () {
+                          Navigator.pop(
+                            bottomSheetContext,
+                            type,
+                          );
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (selected == null ||
+        !mounted) {
+      return;
+    }
+
+    provider.setRoomType(
+      selected,
+    );
+  }
+
+  Widget _hudIconButton({    required IconData icon,
     required String tooltip,
     required VoidCallback onPressed,
   }) {
@@ -1406,8 +1516,7 @@ class _BasicScannerScreenState
                       controller:
                           distanceController,
                       autofocus: true,
-                      keyboardType:
-                          const TextInputType
+                      keyboardType:                          const TextInputType
                               .numberWithOptions(
                         decimal: true,
                       ),
