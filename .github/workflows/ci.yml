@@ -40,6 +40,28 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gradle-
 
+      - name: Cache stable Android debug key
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: ${{ runner.os }}-room-scanner-debug-keystore-v1
+
+      - name: Ensure stable Android debug key
+        shell: bash
+        run: |
+          mkdir -p ~/.android
+          if [ ! -f ~/.android/debug.keystore ]; then
+            keytool -genkeypair \
+              -keystore ~/.android/debug.keystore \
+              -storepass android \
+              -alias androiddebugkey \
+              -keypass android \
+              -dname "CN=Android Debug,O=Room Scanner,C=AR" \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000
+          fi
+
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
