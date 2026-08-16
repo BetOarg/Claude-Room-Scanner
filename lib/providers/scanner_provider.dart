@@ -425,6 +425,101 @@ class ScannerProvider extends ChangeNotifier {
               wallDz * endT,
     );
 
+    // Impide que dos aberturas ocupen el mismo tramo de pared.
+    for (final existing
+        in room.features) {
+      double rawProjection(
+        ARPoint point,
+      ) {
+        return ((point.x - wallStart.x) * wallDx +
+                (point.z - wallStart.z) * wallDz) /
+            wallLengthSquared;
+      }
+
+      bool belongsToWall(
+        ARPoint point,
+      ) {
+        final rawT =
+            rawProjection(point);
+
+        if (rawT < -0.01 ||
+            rawT > 1.01) {
+          return false;
+        }
+
+        final projectedX =
+            wallStart.x +
+                wallDx * rawT;
+
+        final projectedZ =
+            wallStart.z +
+                wallDz * rawT;
+
+        final distanceX =
+            point.x -
+                projectedX;
+
+        final distanceZ =
+            point.z -
+                projectedZ;
+
+        return distanceX * distanceX +
+                distanceZ * distanceZ <=
+            0.0025;
+      }
+
+      if (!belongsToWall(
+            existing.start,
+          ) ||
+          !belongsToWall(
+            existing.end,
+          )) {
+        continue;
+      }
+
+      final existingStartT =
+          rawProjection(
+        existing.start,
+      ).clamp(0.0, 1.0)
+              .toDouble();
+
+      final existingEndT =
+          rawProjection(
+        existing.end,
+      ).clamp(0.0, 1.0)
+              .toDouble();
+
+      final existingMinT =
+          math.min(
+        existingStartT,
+        existingEndT,
+      ).toDouble();
+
+      final existingMaxT =
+          math.max(
+        existingStartT,
+        existingEndT,
+      ).toDouble();
+
+      const separation =
+          0.02;
+
+      final overlaps =
+          startT <
+                  existingMaxT -
+                      separation &&
+              existingMinT <
+                  endT -
+                      separation;
+
+      if (overlaps) {
+        return ValidationResult.invalid(
+          'La abertura se superpone con otra puerta o ventana. '
+          'Elegí otra posición sobre la pared.',
+        );
+      }
+    }
+
     final feature =
         WallFeature(
       id: _nextUniqueId(),
