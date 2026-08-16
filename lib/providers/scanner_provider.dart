@@ -622,24 +622,6 @@ class ScannerProvider extends ChangeNotifier {
   String _getRoomTypeName(
     RoomType type,
   ) {
-    switch (type) {
-      case RoomType.living:
-        return 'Living';
-
-      case RoomType.cocina:
-        return 'Cocina';
-
-      case RoomType.bano:
-        return 'Baño';
-
-      case RoomType.dormitorio:
-        return 'Dormitorio';
-
-      case RoomType.lavadero:
-        return 'Lavadero';
-
-      case RoomType.pasillo:
-        return 'Pasillo';
-    }
+    return type.displayName;
   }
 }
