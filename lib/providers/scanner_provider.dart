@@ -14,6 +14,7 @@ class ScannerProvider extends ChangeNotifier {
 
   RoomModel? _currentRoom;
   RoomType _selectedType = RoomType.living;
+  bool _hasCustomRoomName = false;
   bool _isTrackingOk = false;
 
   /// Último identificador generado.
@@ -71,15 +72,44 @@ class ScannerProvider extends ChangeNotifier {
       _currentRoom =
           _currentRoom!.copyWith(
         type: type,
-        name: _getRoomTypeName(type),
+        name: _hasCustomRoomName
+            ? _currentRoom!.name
+            : _getRoomTypeName(type),
       );
     }
 
     notifyListeners();
   }
 
+  /// Cambia el nombre visible del ambiente sin alterar su tipo técnico.
+  ///
+  /// El nombre personalizado se conserva aunque después se cambie el tipo.
+  void setCurrentRoomName(
+    String name,
+  ) {
+    final normalized =
+        name.trim();
+
+    if (_currentRoom == null ||
+        normalized.isEmpty ||
+        _currentRoom!.name == normalized) {
+      return;
+    }
+
+    _hasCustomRoomName = true;
+
+    _currentRoom =
+        _currentRoom!.copyWith(
+      name: normalized,
+    );
+
+    notifyListeners();
+  }
+
   /// Inicia un ambiente nuevo con un ID resistente a colisiones.
   void startNewRoom() {
+    _hasCustomRoomName = false;
+
     _currentRoom = RoomModel(
       id: _nextUniqueId(),
       name:
