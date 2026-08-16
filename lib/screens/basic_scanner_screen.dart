@@ -34,7 +34,8 @@ class BasicScannerScreen extends StatefulWidget {
 }
 
 class _BasicScannerScreenState
-    extends State<BasicScannerScreen> {
+    extends State<BasicScannerScreen>
+    with WidgetsBindingObserver {
   CameraController? _cameraController;
 
   final BasicScannerAdapter _scannerAdapter =
@@ -50,12 +51,17 @@ class _BasicScannerScreenState
   bool _initializing = true;
   bool _cameraReady = false;
   bool _processing = false;
+  bool _changingLifecycle = false;
+  bool _shouldResumeCamera = false;
 
   String? _initializationError;
 
   @override
   void initState() {
     super.initState();
+
+    WidgetsBinding.instance
+        .addObserver(this);
 
     WidgetsBinding.instance
         .addPostFrameCallback((_) {
@@ -144,7 +150,139 @@ class _BasicScannerScreenState
   }
 
   @override
+  void didChangeAppLifecycleState(
+    AppLifecycleState state,
+  ) {
+    if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
+      _shouldResumeCamera = false;
+      _pauseCamera();
+      return;
+    }
+
+    if (state == AppLifecycleState.resumed) {
+      _shouldResumeCamera = true;
+      _resumeCamera();
+    }
+  }
+
+  Future<void> _pauseCamera() async {
+    if (_changingLifecycle) {
+      return;
+    }
+
+    _changingLifecycle = true;
+
+    final controller =
+        _cameraController;
+
+    _cameraController = null;
+
+    if (mounted) {
+      context
+          .read<ScannerProvider>()
+          .updateTrackingStatus(false);
+
+      setState(() {
+        _cameraReady = false;
+        _initializing = true;
+      });
+    }
+
+    try {
+      await controller?.dispose();
+    } finally {
+      _changingLifecycle = false;
+
+      if (mounted &&
+          _shouldResumeCamera) {
+        _resumeCamera();
+      }
+    }
+  }
+
+  Future<void> _resumeCamera() async {
+    if (_changingLifecycle ||
+        _cameraController != null ||
+        !_shouldResumeCamera) {
+      return;
+    }
+
+    _changingLifecycle = true;
+
+    try {
+      final cameras =
+          await availableCameras();
+
+      if (cameras.isEmpty) {
+        throw StateError(
+          'El dispositivo no tiene una cámara disponible.',
+        );
+      }
+
+      final selectedCamera =
+          cameras.firstWhere(
+        (camera) =>
+            camera.lensDirection ==
+            CameraLensDirection.back,
+        orElse: () => cameras.first,
+      );
+
+      final controller =
+          CameraController(
+        selectedCamera,
+        ResolutionPreset.medium,
+        enableAudio: false,
+      );
+
+      await controller.initialize();
+
+      if (!mounted ||
+          !_shouldResumeCamera) {
+        await controller.dispose();
+        return;
+      }
+
+      _cameraController =
+          controller;
+
+      context
+          .read<ScannerProvider>()
+          .updateTrackingStatus(true);
+
+      setState(() {
+        _cameraReady = true;
+        _initializing = false;
+        _initializationError = null;
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _cameraReady = false;
+        _initializing = false;
+        _initializationError =
+            'No se pudo reanudar la cámara: $error';
+      });
+
+      context
+          .read<ScannerProvider>()
+          .updateTrackingStatus(false);
+    } finally {
+      _changingLifecycle = false;
+    }
+  }
+
+  @override
   void dispose() {
+    _shouldResumeCamera = false;
+
+    WidgetsBinding.instance
+        .removeObserver(this);
+
     _scannerAdapter.dispose();
     _cameraController?.dispose();
 
@@ -539,8 +677,7 @@ class _BasicScannerScreenState
   Widget _buildBottomPanel(
     ScannerProvider provider,
   ) {
-    final count =
-        provider.currentPointsCount;
+    final count =        provider.currentPointsCount;
 
     return Positioned(
       left: 10,
@@ -573,12 +710,6 @@ class _BasicScannerScreenState
           child: Column(
             children: [
               _buildModeSelector(),
-              const SizedBox(
-                height: 10,
-              ),
-              _buildProgressIndicator(
-                count,
-              ),
               const SizedBox(
                 height: 12,
               ),
@@ -1225,8 +1356,7 @@ class _BasicScannerScreenState
                       ),
                       decoration:
                           InputDecoration(
-                        labelText:
-                            'Distancia',
+                        labelText:                            'Distancia',
                         hintText:
                             'Ejemplo: 3,50',
                         suffixText:
