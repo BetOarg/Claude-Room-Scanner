@@ -530,16 +530,9 @@ class _ARScannerScreenState extends State<ARScannerScreen>
                             vertical: 16,
                           ),
                           backgroundColor:
-                              _currentMode ==
-                                      AppMode.wall
-                                  ? Colors.blueAccent
-                                  : _currentMode ==
-                                          AppMode.door
-                                      ? Colors
-                                          .redAccent
-                                      : Colors
-                                          .blue
-                                          .shade300,
+                              _modeColor(
+                            _currentMode,
+                          ),
                           foregroundColor:
                               Colors.white,
                           shape:
@@ -591,6 +584,27 @@ class _ARScannerScreenState extends State<ARScannerScreen>
   // SELECTOR DE MODO
   // ================================================================
 
+  Color _modeColor(
+    AppMode mode,
+  ) {
+    switch (mode) {
+      case AppMode.wall:
+        return const Color(
+          0xFF448AFF,
+        );
+
+      case AppMode.door:
+        return const Color(
+          0xFFFF8A00,
+        );
+
+      case AppMode.window:
+        return const Color(
+          0xFFD500F9,
+        );
+    }
+  }
+
   Widget _buildModeChip(
     AppMode mode,
     IconData icon,
@@ -607,11 +621,8 @@ class _ARScannerScreenState extends State<ARScannerScreen>
       ),
       label: Text(label),
       selected: isSelected,
-      selectedColor: mode == AppMode.wall
-          ? Colors.blueAccent
-          : mode == AppMode.door
-              ? Colors.redAccent
-              : Colors.blue.shade300,
+      selectedColor:
+          _modeColor(mode),
       backgroundColor: Colors.black87,
       labelStyle: TextStyle(
         color: isSelected
