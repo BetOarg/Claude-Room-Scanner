@@ -4,7 +4,8 @@ import 'package:provider/provider.dart';
 import '../models/room_model.dart';
 import '../providers/floor_plan_provider.dart';
 
-class MeasurementEditorScreen extends StatefulWidget {
+class MeasurementEditorScreen
+    extends StatefulWidget {
   final String? roomId;
 
   const MeasurementEditorScreen({
@@ -13,53 +14,57 @@ class MeasurementEditorScreen extends StatefulWidget {
   });
 
   @override
-  State<MeasurementEditorScreen> createState() =>
-      _MeasurementEditorScreenState();
+  State<MeasurementEditorScreen>
+      createState() =>
+          _MeasurementEditorScreenState();
 }
 
 class _MeasurementEditorScreenState
-    extends State<MeasurementEditorScreen> {
-  String? _selectedRoomId;
+    extends State<
+        MeasurementEditorScreen> {
+  int? _selectedRoomIndex;
 
   @override
-  void initState() {
-    super.initState();
-    _selectedRoomId = widget.roomId;
-  }
+  Widget build(
+    BuildContext context,
+  ) {
+    final provider =
+        context.watch<
+            FloorPlanProvider>();
 
-  @override
-  Widget build(BuildContext context) {
-    final provider = context.watch<FloorPlanProvider>();
-    final rooms = provider.completedRooms;
+    final rooms =
+        provider.completedRooms;
 
     if (rooms.isEmpty) {
       return Scaffold(
         appBar: AppBar(
-          title: const Text('Editar medidas'),
+          title: const Text(
+            'Editar medidas',
+          ),
         ),
         body: const Center(
           child: Padding(
-            padding: EdgeInsets.all(24),
+            padding:
+                EdgeInsets.all(24),
             child: Column(
-              mainAxisSize: MainAxisSize.min,
+              mainAxisSize:
+                  MainAxisSize.min,
               children: [
                 Icon(
-                  Icons.straighten_outlined,
+                  Icons
+                      .straighten_outlined,
                   size: 64,
                 ),
                 SizedBox(height: 16),
                 Text(
                   'No hay ambientes para editar.',
-                  textAlign: TextAlign.center,
+                  textAlign:
+                      TextAlign.center,
                   style: TextStyle(
                     fontSize: 18,
-                    fontWeight: FontWeight.bold,
+                    fontWeight:
+                        FontWeight.bold,
                   ),
-                ),
-                SizedBox(height: 8),
-                Text(
-                  'Primero completá y guardá un ambiente desde el Scanner.',
-                  textAlign: TextAlign.center,
                 ),
               ],
             ),
@@ -68,82 +73,125 @@ class _MeasurementEditorScreenState
       );
     }
 
-    final selectedRoom = _resolveSelectedRoom(rooms);
+    final selectedIndex =
+        _resolveSelectedIndex(
+      rooms,
+    );
+
+    final selectedRoom =
+        rooms[selectedIndex];
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Editar medidas'),
+        title: const Text(
+          'Editar medidas',
+        ),
       ),
       body: Column(
         children: [
           _buildRoomSelector(
             rooms,
-            selectedRoom,
+            selectedIndex,
           ),
-          if (selectedRoom != null)
-            Expanded(
-              child: _buildRoomEditor(
-                selectedRoom,
-                provider,
-              ),
+          Expanded(
+            child:
+                _buildRoomEditor(
+              selectedRoom,
+              provider,
+              selectedIndex,
             ),
+          ),
         ],
       ),
     );
   }
 
-  RoomModel? _resolveSelectedRoom(
+  int _resolveSelectedIndex(
     List<RoomModel> rooms,
   ) {
-    if (_selectedRoomId != null) {
-      for (final room in rooms) {
-        if (room.id == _selectedRoomId) {
-          return room;
-        }
+    if (_selectedRoomIndex !=
+            null &&
+        _selectedRoomIndex! >=
+            0 &&
+        _selectedRoomIndex! <
+            rooms.length) {
+      return _selectedRoomIndex!;
+    }
+
+    if (widget.roomId != null) {
+      final index =
+          rooms.indexWhere(
+        (room) =>
+            room.id ==
+            widget.roomId,
+      );
+
+      if (index >= 0) {
+        _selectedRoomIndex =
+            index;
+
+        return index;
       }
     }
 
-    _selectedRoomId = rooms.first.id;
+    _selectedRoomIndex = 0;
 
-    return rooms.first;
+    return 0;
   }
 
   Widget _buildRoomSelector(
     List<RoomModel> rooms,
-    RoomModel? selectedRoom,
+    int selectedIndex,
   ) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(
+    return Padding(
+      padding:
+          const EdgeInsets.fromLTRB(
         16,
         14,
         16,
         12,
       ),
-      child: DropdownButtonFormField<String>(
-        value: selectedRoom?.id,
-        decoration: const InputDecoration(
+      child:
+          DropdownButtonFormField<int>(
+        value: selectedIndex,
+        isExpanded: true,
+        decoration:
+            const InputDecoration(
           labelText: 'Ambiente',
           prefixIcon: Icon(
             Icons.home_outlined,
           ),
-          border: OutlineInputBorder(),
+          border:
+              OutlineInputBorder(),
         ),
-        items: rooms.map((room) {
-          return DropdownMenuItem<String>(
-            value: room.id,
-            child: Text(
-              room.name,
-            ),
-          );
-        }).toList(),
+        items: List.generate(
+          rooms.length,
+          (index) {
+            final room =
+                rooms[index];
+
+            return DropdownMenuItem<
+                int>(
+              value: index,
+              child: Text(
+                '${index + 1}. ${room.name}',
+                overflow:
+                    TextOverflow.ellipsis,
+              ),
+            );
+          },
+        ),
         onChanged: (value) {
-          if (value == null) {
+          if (value == null ||
+              value < 0 ||
+              value >=
+                  rooms.length) {
             return;
           }
 
           setState(() {
-            _selectedRoomId = value;
+            _selectedRoomIndex =
+                value;
           });
         },
       ),
@@ -153,16 +201,20 @@ class _MeasurementEditorScreenState
   Widget _buildRoomEditor(
     RoomModel room,
     FloorPlanProvider provider,
+    int roomIndex,
   ) {
-    final area = _calculateArea(room);
+    final area =
+        _calculateArea(room);
 
-    final perimeter = _calculatePerimeter(
+    final perimeter =
+        _calculatePerimeter(
       room,
       provider,
     );
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(
+      padding:
+          const EdgeInsets.fromLTRB(
         16,
         0,
         16,
@@ -174,32 +226,41 @@ class _MeasurementEditorScreenState
           area,
           perimeter,
         ),
-        const SizedBox(height: 16),
+        const SizedBox(
+          height: 16,
+        ),
         const Text(
           'Paredes',
           style: TextStyle(
             fontSize: 20,
-            fontWeight: FontWeight.bold,
+            fontWeight:
+                FontWeight.bold,
           ),
         ),
-        const SizedBox(height: 6),
+        const SizedBox(
+          height: 6,
+        ),
         const Text(
-          'Seleccioná una pared para corregir su longitud. La dirección de la pared se conserva automáticamente.',
+          'Seleccioná una pared para corregir su longitud. '
+          'La dirección se conserva automáticamente.',
           style: TextStyle(
-            color: Colors.black54,
+            color:
+                Colors.black54,
             height: 1.3,
           ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(
+          height: 12,
+        ),
         ...List.generate(
           room.points.length,
-          (index) {
-            return _buildWallCard(
-              room,
-              provider,
-              index,
-            );
-          },
+          (wallIndex) =>
+              _buildWallCard(
+            room,
+            provider,
+            roomIndex,
+            wallIndex,
+          ),
         ),
       ],
     );
@@ -213,7 +274,10 @@ class _MeasurementEditorScreenState
     return Card(
       elevation: 0,
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding:
+            const EdgeInsets.all(
+          16,
+        ),
         child: Row(
           children: [
             Expanded(
@@ -226,7 +290,8 @@ class _MeasurementEditorScreenState
             Container(
               width: 1,
               height: 48,
-              color: Colors.black12,
+              color:
+                  Colors.black12,
             ),
             Expanded(
               child: _metric(
@@ -238,7 +303,8 @@ class _MeasurementEditorScreenState
             Container(
               width: 1,
               height: 48,
-              color: Colors.black12,
+              color:
+                  Colors.black12,
             ),
             Expanded(
               child: _metric(
@@ -264,19 +330,24 @@ class _MeasurementEditorScreenState
           icon,
           size: 22,
         ),
-        const SizedBox(height: 6),
+        const SizedBox(
+          height: 6,
+        ),
         Text(
           value,
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
+          style:
+              const TextStyle(
+            fontWeight:
+                FontWeight.bold,
             fontSize: 15,
           ),
         ),
-        const SizedBox(height: 2),
         Text(
           label,
-          style: const TextStyle(
-            color: Colors.black54,
+          style:
+              const TextStyle(
+            color:
+                Colors.black54,
             fontSize: 11,
           ),
         ),
@@ -287,60 +358,68 @@ class _MeasurementEditorScreenState
   Widget _buildWallCard(
     RoomModel room,
     FloorPlanProvider provider,
+    int roomIndex,
     int wallIndex,
   ) {
-    final length = provider.wallLength(
+    final length =
+        provider.wallLength(
       room,
       wallIndex,
     );
 
-    final startIndex = wallIndex + 1;
+    final startIndex =
+        wallIndex + 1;
 
     final endIndex =
-        ((wallIndex + 1) % room.points.length) + 1;
+        ((wallIndex + 1) %
+                room.points.length) +
+            1;
 
     return Card(
-      margin: const EdgeInsets.only(
+      margin:
+          const EdgeInsets.only(
         bottom: 10,
       ),
       child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: 6,
-        ),
-        leading: CircleAvatar(
+        leading:
+            CircleAvatar(
           child: Text(
             '${wallIndex + 1}',
           ),
         ),
         title: Text(
           'Pared ${wallIndex + 1}',
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
+          style:
+              const TextStyle(
+            fontWeight:
+                FontWeight.bold,
           ),
         ),
         subtitle: Text(
           'Esquina $startIndex → Esquina $endIndex',
         ),
         trailing: Row(
-          mainAxisSize: MainAxisSize.min,
+          mainAxisSize:
+              MainAxisSize.min,
           children: [
             Text(
               '${length.toStringAsFixed(2)} m',
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
+              style:
+                  const TextStyle(
+                fontWeight:
+                    FontWeight.bold,
               ),
             ),
-            const SizedBox(width: 8),
             IconButton(
-              tooltip: 'Editar medida',
               icon: const Icon(
-                Icons.edit_outlined,
+                Icons
+                    .edit_outlined,
               ),
-              onPressed: () => _editWallLength(
+              onPressed: () =>
+                  _editWallLength(
                 room,
                 provider,
+                roomIndex,
                 wallIndex,
                 length,
               ),
@@ -354,19 +433,26 @@ class _MeasurementEditorScreenState
   Future<void> _editWallLength(
     RoomModel room,
     FloorPlanProvider provider,
+    int roomIndex,
     int wallIndex,
     double currentLength,
   ) async {
-    final controller = TextEditingController(
-      text: currentLength.toStringAsFixed(2),
+    final controller =
+        TextEditingController(
+      text:
+          currentLength
+              .toStringAsFixed(2),
     );
 
     String? error;
 
-    final newLength = await showDialog<double>(
+    final newLength =
+        await showDialog<double>(
       context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) {
+      barrierDismissible:
+          false,
+      builder:
+          (dialogContext) {
         return StatefulBuilder(
           builder: (
             context,
@@ -376,75 +462,61 @@ class _MeasurementEditorScreenState
               title: Text(
                 'Editar pared ${wallIndex + 1}',
               ),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment:
-                      CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Medida actual: '
-                      '${currentLength.toStringAsFixed(2)} m',
-                      style: const TextStyle(
-                        color: Colors.black54,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: controller,
-                      autofocus: true,
-                      keyboardType:
-                          const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                      decoration: InputDecoration(
-                        labelText: 'Nueva longitud',
-                        hintText: 'Ejemplo: 3,25',
-                        suffixText: 'metros',
-                        prefixIcon: const Icon(
-                          Icons.straighten,
-                        ),
-                        errorText: error,
-                        border: const OutlineInputBorder(),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    const Text(
-                      'La dirección de esta pared se mantiene. '
-                      'Solo se modifica su longitud.',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.black54,
-                        height: 1.3,
-                      ),
-                    ),
-                  ],
+              content: TextField(
+                controller:
+                    controller,
+                autofocus: true,
+                keyboardType:
+                    const TextInputType
+                        .numberWithOptions(
+                  decimal: true,
+                ),
+                decoration:
+                    InputDecoration(
+                  labelText:
+                      'Nueva longitud',
+                  suffixText:
+                      'metros',
+                  errorText:
+                      error,
+                  prefixIcon:
+                      const Icon(
+                    Icons.straighten,
+                  ),
+                  border:
+                      const OutlineInputBorder(),
                 ),
               ),
               actions: [
                 TextButton(
-                  onPressed: () {
-                    Navigator.pop(
-                      dialogContext,
-                    );
-                  },
-                  child: const Text(
+                  onPressed: () =>
+                      Navigator.pop(
+                    dialogContext,
+                  ),
+                  child:
+                      const Text(
                     'Cancelar',
                   ),
                 ),
-                FilledButton.icon(
+                FilledButton(
                   onPressed: () {
                     final value =
                         _parseNumber(
-                      controller.text,
+                      controller
+                          .text,
                     );
 
-                    if (value == null ||
-                        value <= 0) {
-                      setDialogState(() {
-                        error =
-                            'Ingresá una longitud válida mayor a 0.';
-                      });
+                    if (value ==
+                            null ||
+                        value <=
+                            0) {
+                      setDialogState(
+                        () {
+                          error =
+                              'Ingresá una longitud válida mayor a 0.';
+                        },
+                      );
+
                       return;
                     }
 
@@ -453,11 +525,9 @@ class _MeasurementEditorScreenState
                       value,
                     );
                   },
-                  icon: const Icon(
-                    Icons.check,
-                  ),
-                  label: const Text(
-                    'Continuar',
+                  child:
+                      const Text(
+                    'Guardar',
                   ),
                 ),
               ],
@@ -469,16 +539,22 @@ class _MeasurementEditorScreenState
 
     controller.dispose();
 
-    if (newLength == null ||
+    if (newLength ==
+            null ||
         !mounted) {
       return;
     }
 
     final result =
-        await provider.updateWallLength(
+        await provider
+            .updateWallLength(
       roomId: room.id,
-      wallIndex: wallIndex,
-      lengthMeters: newLength,
+      roomIndex:
+          roomIndex,
+      wallIndex:
+          wallIndex,
+      lengthMeters:
+          newLength,
     );
 
     if (!mounted) {
@@ -486,14 +562,16 @@ class _MeasurementEditorScreenState
     }
 
     if (!result.isValid) {
-      _showError(
+      _showMessage(
         result.errorMessage ??
             'La nueva medida no es válida.',
+        error: true,
       );
+
       return;
     }
 
-    _showSuccess(
+    _showMessage(
       result.warningMessage ??
           'Medida actualizada.',
     );
@@ -502,25 +580,26 @@ class _MeasurementEditorScreenState
   double _calculateArea(
     RoomModel room,
   ) {
-    final points = room.points;
-
-    if (points.length < 3) {
+    if (room.points.length <
+        3) {
       return 0.0;
     }
 
     double area = 0.0;
 
     for (int i = 0;
-        i < points.length;
+        i < room.points.length;
         i++) {
       final next =
-          (i + 1) % points.length;
+          (i + 1) %
+              room.points.length;
 
       area +=
-          points[i].x *
-                  points[next].z -
-              points[next].x *
-                  points[i].z;
+          room.points[i].x *
+                  room.points[next]
+                      .z -
+              room.points[next].x *
+                  room.points[i].z;
     }
 
     return area.abs() / 2.0;
@@ -530,109 +609,67 @@ class _MeasurementEditorScreenState
     RoomModel room,
     FloorPlanProvider provider,
   ) {
-    double total = 0.0;
+    double result = 0.0;
 
     for (int i = 0;
         i < room.points.length;
         i++) {
-      total += provider.wallLength(
+      result +=
+          provider.wallLength(
         room,
         i,
       );
     }
 
-    return total;
+    return result;
   }
 
   double? _parseNumber(
     String value,
   ) {
-    var normalized = value.trim();
-
-    normalized = normalized.replaceAll(
-      'm²',
-      '',
-    );
-
-    normalized = normalized.replaceAll(
-      'm',
-      '',
-    );
-
-    normalized = normalized.replaceAll(
-      ',',
-      '.',
-    );
-
-    normalized = normalized.trim();
+    final normalized =
+        value
+            .trim()
+            .replaceAll(
+              'm²',
+              '',
+            )
+            .replaceAll(
+              'm',
+              '',
+            )
+            .replaceAll(
+              ',',
+              '.',
+            )
+            .trim();
 
     return double.tryParse(
       normalized,
     );
   }
 
-  void _showError(
-    String message,
-  ) {
-    ScaffoldMessenger.of(context)
+  void _showMessage(
+    String message, {
+    bool error = false,
+  }) {
+    ScaffoldMessenger.of(
+      context,
+    )
       ..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
           behavior:
-              SnackBarBehavior.floating,
+              SnackBarBehavior
+                  .floating,
           backgroundColor:
-              Colors.red.shade800,
-          duration:
-              const Duration(
-            seconds: 4,
-          ),
-          content: Row(
-            children: [
-              const Icon(
-                Icons.warning_amber_rounded,
-                color: Colors.white,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  message,
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-  }
-
-  void _showSuccess(
-    String message,
-  ) {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          behavior:
-              SnackBarBehavior.floating,
-          backgroundColor:
-              Colors.green.shade700,
-          duration:
-              const Duration(
-            seconds: 2,
-          ),
-          content: Row(
-            children: [
-              const Icon(
-                Icons.check_circle_outline,
-                color: Colors.white,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  message,
-                ),
-              ),
-            ],
-          ),
+              error
+                  ? Colors.red
+                      .shade800
+                  : Colors.green
+                      .shade700,
+          content:
+              Text(message),
         ),
       );
   }
