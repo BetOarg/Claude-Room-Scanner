@@ -487,6 +487,10 @@ class _BasicScannerScreenState
                           'Nuevo ambiente',
                   subtitle:
                       '$count esquinas',
+                  onTap: () =>
+                      _showCustomRoomNameDialog(
+                    provider,
+                  ),
                 ),
               ),
               const SizedBox(
@@ -577,85 +581,193 @@ class _BasicScannerScreenState
     required IconData icon,
     required String title,
     required String subtitle,
+    VoidCallback? onTap,
   }) {
-    return Container(
-      padding:
-          const EdgeInsets.symmetric(
-        horizontal: 14,
-        vertical: 10,
-      ),
-      decoration:
-          BoxDecoration(
-        color:
-            Colors.black.withValues(
-          alpha: 0.78,
-        ),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
         borderRadius:
             BorderRadius.circular(14),
-        border: Border.all(
-          color: Colors.white24,
+        child: Container(
+          padding:
+              const EdgeInsets.symmetric(
+            horizontal: 14,
+            vertical: 10,
+          ),
+          decoration:
+              BoxDecoration(
+            color:
+                Colors.black.withValues(
+              alpha: 0.78,
+            ),
+            borderRadius:
+                BorderRadius.circular(14),
+            border: Border.all(
+              color: Colors.white24,
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration:
+                    BoxDecoration(
+                  color: Colors.blueAccent
+                      .withValues(
+                    alpha: 0.25,
+                  ),
+                  borderRadius:
+                      BorderRadius.circular(
+                    10,
+                  ),
+                ),
+                child: Icon(
+                  icon,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(
+                width: 10,
+              ),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment:
+                      CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style:
+                          const TextStyle(
+                        color: Colors.white,
+                        fontWeight:
+                            FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                      overflow:
+                          TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(
+                      height: 2,
+                    ),
+                    Text(
+                      subtitle,
+                      style:
+                          const TextStyle(
+                        color: Colors.white60,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (onTap != null)
+                const Icon(
+                  Icons.edit_outlined,
+                  color: Colors.white60,
+                  size: 19,
+                ),
+            ],
+          ),
         ),
       ),
-      child: Row(
-        children: [
-          Container(
-            width: 38,
-            height: 38,
+    );
+  }
+
+  Future<void> _showCustomRoomNameDialog(
+    ScannerProvider provider,
+  ) async {
+    final controller =
+        TextEditingController(
+      text: provider.currentRoom?.name ??
+          provider.selectedType.displayName,
+    );
+
+    final name =
+        await showDialog<String>(
+      context: context,
+      builder: (
+        dialogContext,
+      ) {
+        return AlertDialog(
+          title: const Text(
+            'Nombre del ambiente',
+          ),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            textCapitalization:
+                TextCapitalization.sentences,
+            maxLength: 60,
             decoration:
-                BoxDecoration(
-              color: Colors.blueAccent
-                  .withValues(
-                alpha: 0.25,
+                const InputDecoration(
+              labelText:
+                  'Destino o nombre',
+              hintText:
+                  'Ej.: Dormitorio de Ana',
+              border:
+                  OutlineInputBorder(),
+            ),
+            onSubmitted: (value) {
+              final normalized =
+                  value.trim();
+
+              if (normalized.isNotEmpty) {
+                Navigator.pop(
+                  dialogContext,
+                  normalized,
+                );
+              }
+            },
+          ),
+          actions: [
+            TextButton(
+              onPressed: () =>
+                  Navigator.pop(
+                dialogContext,
               ),
-              borderRadius:
-                  BorderRadius.circular(
-                10,
+              child: const Text(
+                'Cancelar',
               ),
             ),
-            child: Icon(
-              icon,
-              color:
-                  Colors.white,
+            FilledButton(
+              onPressed: () {
+                final normalized =
+                    controller.text.trim();
+
+                if (normalized.isEmpty) {
+                  return;
+                }
+
+                Navigator.pop(
+                  dialogContext,
+                  normalized,
+                );
+              },
+              child: const Text(
+                'Guardar',
+              ),
             ),
-          ),
-          const SizedBox(
-            width: 10,
-          ),
-          Expanded(
-            child: Column(
-              crossAxisAlignment:
-                  CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style:
-                      const TextStyle(
-                    color:
-                        Colors.white,
-                    fontWeight:
-                        FontWeight.bold,
-                    fontSize: 14,
-                  ),
-                  overflow:
-                      TextOverflow.ellipsis,
-                ),
-                const SizedBox(
-                  height: 2,
-                ),
-                Text(
-                  subtitle,
-                  style:
-                      const TextStyle(
-                    color:
-                        Colors.white60,
-                    fontSize: 12,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+          ],
+        );
+      },
+    );
+
+    await Future<void>.delayed(
+      kThemeAnimationDuration,
+    );
+
+    controller.dispose();
+
+    if (!mounted ||
+        name == null ||
+        name.trim().isEmpty) {
+      return;
+    }
+
+    provider.setCurrentRoomName(
+      name,
     );
   }
 
@@ -663,8 +775,7 @@ class _BasicScannerScreenState
     ScannerProvider provider,
   ) async {
     final selected =
-        await showModalBottomSheet<
-            RoomType>(
+        await showModalBottomSheet<            RoomType>(
       context: context,
       isScrollControlled: true,
       builder: (
@@ -1441,7 +1552,6 @@ class _BasicScannerScreenState
               ? '0,80'
               : '1,00',
     );
-
     double? distanceError;
     double? angleError;
     double? featureWidthError;
