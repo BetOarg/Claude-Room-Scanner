@@ -766,8 +766,7 @@ class _FloorPlanViewerScreenState
                             Icons.close,
                           ),
                         ),
-                      ],
-                    ),
+                      ],                    ),
                     const SizedBox(
                       height: 8,
                     ),
@@ -1221,7 +1220,9 @@ class FloorPlanPainter
     final wallPaint =
         Paint()
           ..color =
-              Colors.blueAccent
+              const Color(
+            0xFF448AFF,
+          )
           ..strokeWidth = 3.0
           ..style =
               PaintingStyle.stroke
@@ -1232,9 +1233,10 @@ class FloorPlanPainter
 
     final roomFill =
         Paint()
-          ..color = Colors
-              .blueAccent
-              .withOpacity(
+          ..color =
+              const Color(
+            0xFF448AFF,
+          ).withOpacity(
             0.10,
           )
           ..style =
@@ -1243,13 +1245,18 @@ class FloorPlanPainter
     final pointPaint =
         Paint()
           ..color =
-              Colors.blueAccent
+              const Color(
+            0xFF448AFF,
+          )
           ..style =
               PaintingStyle.fill;
 
     final doorPaint =
         Paint()
-          ..color = Colors.red
+          ..color =
+              const Color(
+            0xFFFF8A00,
+          )
           ..strokeWidth = 5.0
           ..style =
               PaintingStyle.stroke
@@ -1258,7 +1265,10 @@ class FloorPlanPainter
 
     final windowPaint =
         Paint()
-          ..color = Colors.blue
+          ..color =
+              const Color(
+            0xFFD500F9,
+          )
           ..strokeWidth = 5.0
           ..style =
               PaintingStyle.stroke
