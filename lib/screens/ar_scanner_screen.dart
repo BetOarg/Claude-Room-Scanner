@@ -42,6 +42,9 @@ class ARScannerScreen extends StatefulWidget {
 class _ARScannerScreenState extends State<ARScannerScreen> {
   AppMode _currentMode = AppMode.wall;
 
+  ARPoint? _pendingFeatureStart;
+  AppMode? _pendingFeatureMode;
+
   // ================================================================
   // CONTROLADORES AR
   // ================================================================
@@ -463,10 +466,13 @@ class _ARScannerScreenState extends State<ARScannerScreen> {
                           _currentMode ==
                                   AppMode.wall
                               ? 'AÑADIR ESQUINA'
-                              : _currentMode ==
-                                      AppMode.door
-                                  ? 'AÑADIR PUERTA'
-                                  : 'AÑADIR VENTANA',
+                              : _pendingFeatureStart !=
+                                      null
+                                  ? 'MARCAR SEGUNDO EXTREMO'
+                                  : _currentMode ==
+                                          AppMode.door
+                                      ? 'MEDIR PUERTA'
+                                      : 'MEDIR VENTANA',
                         ),
                         style:
                             ElevatedButton.styleFrom(
@@ -575,6 +581,8 @@ class _ARScannerScreenState extends State<ARScannerScreen> {
 
         setState(() {
           _currentMode = mode;
+          _pendingFeatureStart = null;
+          _pendingFeatureMode = null;
         });
       },
     );
@@ -674,7 +682,7 @@ class _ARScannerScreenState extends State<ARScannerScreen> {
         const SnackBar(
           content: Text(
             'Necesitas marcar al menos 2 esquinas '
-            'antes de agregar una abertura.',
+            'antes de medir una abertura.',
           ),
           backgroundColor: Colors.orange,
         ),
@@ -683,35 +691,99 @@ class _ARScannerScreenState extends State<ARScannerScreen> {
       return;
     }
 
+    final currentPoint =
+        ARPoint(
+      x: position.x,
+      y: position.y,
+      z: position.z,
+    );
+
     final label =
         mode == AppMode.door
             ? 'Puerta'
             : 'Ventana';
+
+    final pendingStart =
+        _pendingFeatureStart;
+
+    if (pendingStart == null ||
+        _pendingFeatureMode !=
+            mode) {
+      setState(() {
+        _pendingFeatureStart =
+            currentPoint;
+        _pendingFeatureMode =
+            mode;
+      });
+
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              'Inicio de $label registrado. '
+              'Ubicá la cámara en el otro extremo y volvé a pulsar.',
+            ),
+            duration:
+                const Duration(
+              seconds: 3,
+            ),
+          ),
+        );
+
+      return;
+    }
 
     final featureType =
         mode == AppMode.door
             ? FeatureType.door
             : FeatureType.window;
 
-    // Las puertas/ventanas se guardan como WallFeature.
-    provider.addFeatureToCurrentRoom(
+    final result =
+        provider
+            .addFeatureToCurrentRoom(
       featureType,
-      ARPoint(
-        x: position.x,
-        y: position.y,
-        z: position.z,
-      ),
+      pendingStart,
+      endLocation:
+          currentPoint,
     );
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          '$label marcada en la posición actual',
+    setState(() {
+      _pendingFeatureStart = null;
+      _pendingFeatureMode = null;
+    });
+
+    if (!result.isValid) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              result.errorMessage ??
+                  'No se pudo medir la abertura.',
+            ),
+            backgroundColor:
+                Colors.redAccent,
+          ),
+        );
+
+      return;
+    }
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            '$label guardada. '
+            '${result.warningMessage ?? ''}',
+          ),
+          duration:
+              const Duration(
+            seconds: 2,
+          ),
         ),
-        duration:
-            const Duration(seconds: 1),
-      ),
-    );
+      );
   }
 
   // ================================================================
