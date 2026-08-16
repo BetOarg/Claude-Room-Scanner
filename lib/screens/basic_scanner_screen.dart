@@ -647,8 +647,7 @@ class _BasicScannerScreenState
 
   Widget _modeButton(
     BasicAppMode mode,
-    IconData icon,
-    String label,
+    IconData icon,String label,
   ) {
     final selected =
         _currentMode == mode;
@@ -1040,10 +1039,6 @@ class _BasicScannerScreenState
         _showMessage(
           result.warningMessage!,
         );
-      } else {
-        _showMessage(
-          'Esquina ${provider.currentPointsCount} agregada.',
-        );
       }
     } catch (error) {
       _scannerAdapter
@@ -1301,8 +1296,7 @@ class _BasicScannerScreenState
                       spacing: 6,
                       runSpacing: 6,
                       children: [
-                        _angleChip(
-                          '0°',
+                        _angleChip('0°',
                           0,
                           angleController,
                           setDialogState,
