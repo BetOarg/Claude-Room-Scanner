@@ -1,12 +1,59 @@
 import 'package:vector_math/vector_math_64.dart' as vector;
 
 enum RoomType {
+  // No cambiar el orden de los tipos históricos:
+  // Isar los persiste por posición.
   living,
   cocina,
   bano,
   dormitorio,
   lavadero,
   pasillo,
+
+  // Nuevos tipos agregados al final para conservar compatibilidad.
+  comedor,
+  comedorDiario,
+  patio,
+  hall,
+  balcon,
+  terraza,
+  cochera,
+  playroom,
+}
+
+extension RoomTypeDisplay on RoomType {
+  String get displayName {
+    switch (this) {
+      case RoomType.living:
+        return 'Living';
+      case RoomType.cocina:
+        return 'Cocina';
+      case RoomType.bano:
+        return 'Baño';
+      case RoomType.dormitorio:
+        return 'Dormitorio';
+      case RoomType.lavadero:
+        return 'Lavadero';
+      case RoomType.pasillo:
+        return 'Pasillo';
+      case RoomType.comedor:
+        return 'Comedor';
+      case RoomType.comedorDiario:
+        return 'Comedor diario';
+      case RoomType.patio:
+        return 'Patio';
+      case RoomType.hall:
+        return 'Hall';
+      case RoomType.balcon:
+        return 'Balcón';
+      case RoomType.terraza:
+        return 'Terraza';
+      case RoomType.cochera:
+        return 'Cochera';
+      case RoomType.playroom:
+        return 'Playroom';
+    }
+  }
 }
 
 enum FeatureType {
