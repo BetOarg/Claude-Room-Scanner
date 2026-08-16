@@ -39,7 +39,25 @@ class IsarRoom {
 }
 
 /// Tipo de Habitación
-enum IsarRoomType { living, cocina, bano, dormitorio, lavadero, pasillo }
+enum IsarRoomType {
+  // Mantener el orden histórico para no alterar datos existentes.
+  living,
+  cocina,
+  bano,
+  dormitorio,
+  lavadero,
+  pasillo,
+
+  // Nuevos tipos al final.
+  comedor,
+  comedorDiario,
+  patio,
+  hall,
+  balcon,
+  terraza,
+  cochera,
+  playroom,
+}
 
 /// Objeto Embebido: Punto AR 3D
 @embedded
