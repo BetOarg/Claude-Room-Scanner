@@ -436,7 +436,7 @@ class _ARScannerScreenState extends State<ARScannerScreen>
                         ),
                         child: ChoiceChip(
                           label: Text(
-                            type.name.toUpperCase(),
+                            type.displayName.toUpperCase(),
                           ),
                           selected: isSelected,
                           selectedColor:
