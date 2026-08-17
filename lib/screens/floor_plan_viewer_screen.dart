@@ -273,7 +273,8 @@ class _FloorPlanViewerScreenState
                   title: Text('$label seleccionada'),
                   subtitle: Text(
                     '${feature.isConnected ? 'Conectada' : 'Disponible'} · '
-                    '${_featureWidth(feature).toStringAsFixed(2)} m',
+                    '${_featureWidth(feature).toStringAsFixed(2)} m'
+                    '${feature.isConnected ? '' : ' · Inicio en el punto marcado'}',
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -311,16 +312,12 @@ class _FloorPlanViewerScreenState
 
     if (!mounted || side == null) return;
 
-    final startEndpoint = await _chooseStartEndpoint();
-
-    if (!mounted || startEndpoint == null) return;
-
     final provider = context.read<FloorPlanProvider>();
     final reference = provider.createContinuationReference(
       roomId: selection.roomId,
       featureId: feature.id,
       side: side,
-      startEndpoint: startEndpoint,
+      startEndpoint: ContinuationStartEndpoint.start,
     );
 
     final projectUuid = provider.projectUuid;
@@ -362,8 +359,8 @@ class _FloorPlanViewerScreenState
             mainAxisSize: MainAxisSize.min,
             children: [
               const Text(
-                'La abertura se representa desde A hacia B. Elegí la flecha '
-                'que apunta al ambiente que vas a escanear.',
+                'El punto verde marca dónde comenzará el nuevo ambiente. '
+                'Elegí la flecha que apunta hacia el ambiente que vas a escanear.',
               ),
               const SizedBox(height: 16),
               SizedBox(
@@ -406,41 +403,6 @@ class _FloorPlanViewerScreenState
             ],
           ),
           actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Cancelar'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  Future<ContinuationStartEndpoint?> _chooseStartEndpoint() {
-    return showDialog<ContinuationStartEndpoint>(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text('¿Desde qué extremo comenzás?'),
-          content: const Text(
-            'Elegí el extremo de la abertura donde vas a marcar la primera '
-            'esquina. El plano continuará desde ese punto, no desde el centro.',
-          ),
-          actions: [
-            OutlinedButton(
-              onPressed: () => Navigator.pop(
-                dialogContext,
-                ContinuationStartEndpoint.start,
-              ),
-              child: const Text('Comenzar desde A'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(
-                dialogContext,
-                ContinuationStartEndpoint.end,
-              ),
-              child: const Text('Comenzar desde B'),
-            ),
             TextButton(
               onPressed: () => Navigator.pop(dialogContext),
               child: const Text('Cancelar'),
@@ -503,7 +465,6 @@ class _FloorPlanViewerScreenState
   // ===========================================================================
   // ORGANIZACIÓN AUTOMÁTICA
   // ===========================================================================
-
   Future<void> _organizeRooms() async {
     final provider =
         context.read<
@@ -915,8 +876,7 @@ class _FloorPlanViewerScreenState
   }
   // ===========================================================================
   // PUERTAS / VENTANAS
-  // ===========================================================================
-  Future<void>
+  // ===========================================================================  Future<void>
       _showAddFeatureMenu({
     required String roomId,
     required ARPoint location,
@@ -1443,7 +1403,6 @@ enum _RoomListActionType {
   rename,
   organize,
 }
-
 class _RoomListAction {
   final _RoomListActionType type;
 
@@ -1510,8 +1469,16 @@ class _OpeningDirectionPainter extends CustomPainter {
       midpoint - normal * arrowLength,
       arrowPaint,
     );
-    _drawLabel(canvas, 'A', start - normal * 18);
-    _drawLabel(canvas, 'B', end - normal * 18);
+    canvas.drawCircle(
+      start,
+      9,
+      Paint()..color = const Color(0xFF00C853),
+    );
+    canvas.drawCircle(
+      start,
+      3,
+      Paint()..color = Colors.white,
+    );
   }
 
   void _drawArrow(
@@ -1540,22 +1507,6 @@ class _OpeningDirectionPainter extends CustomPainter {
       end - direction * 10 - perpendicular * 8,
       paint,
     );
-  }
-
-  void _drawLabel(Canvas canvas, String text, Offset position) {
-    final painter = TextPainter(
-      text: TextSpan(
-        text: text,
-        style: const TextStyle(
-          color: Colors.black87,
-          fontSize: 16,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
-      textDirection: TextDirection.ltr,
-    )..layout();
-
-    painter.paint(canvas, position);
   }
 
   @override
@@ -1972,76 +1923,33 @@ class FloorPlanPainter
           break;
       }
 
-      if (isSelected) {
-        final midpoint = Offset(
-          (start.dx + end.dx) / 2.0,
-          (start.dy + end.dy) / 2.0,
-        );
-
-        canvas.drawCircle(
-          start,
-          5.0,
-          referencePaint,
-        );
-        canvas.drawCircle(
-          end,
-          5.0,
-          referencePaint,
-        );
-        canvas.drawCircle(
-          midpoint,
-          7.0,
-          referencePaint,
-        );
-        _drawEndpointLabel(
+      if (!feature.isConnected) {
+        _drawContinuationPoint(
           canvas,
-          'A',
           start,
-        );
-        _drawEndpointLabel(
-          canvas,
-          'B',
-          end,
+          referencePaint,
+          selected: isSelected,
         );
       }
     }
   }
 
-  void _drawEndpointLabel(
+  void _drawContinuationPoint(
     Canvas canvas,
-    String label,
     Offset point,
-  ) {
-    final textPainter = TextPainter(
-      text: TextSpan(
-        text: label,
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 12,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
-      textDirection: TextDirection.ltr,
-    )..layout();
-
-    final center = point.translate(0, -18);
-    final rect = Rect.fromCenter(
-      center: center,
-      width: 22,
-      height: 22,
+    Paint referencePaint, {
+    required bool selected,
+  }) {
+    canvas.drawCircle(
+      point,
+      selected ? 10 : 8,
+      referencePaint,
     );
 
     canvas.drawCircle(
-      center,
-      11,
-      Paint()..color = const Color(0xFF00C853),
-    );
-    textPainter.paint(
-      canvas,
-      Offset(
-        rect.center.dx - textPainter.width / 2,
-        rect.center.dy - textPainter.height / 2,
-      ),
+      point,
+      selected ? 4 : 3,
+      Paint()..color = Colors.white,
     );
   }
 
