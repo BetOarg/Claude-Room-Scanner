@@ -238,7 +238,6 @@ class _ARScannerScreenState extends State<ARScannerScreen>
 
     return position;
   }
-
   // ================================================================
   // BUILD
   // ================================================================
@@ -770,7 +769,6 @@ class _ARScannerScreenState extends State<ARScannerScreen>
       name,
     );
   }
-
   String _continuationInstruction() {
     if (_continuationSessionStart == null) {
       return 'Apuntá al extremo A de la abertura y marcá la referencia.';
@@ -855,7 +853,10 @@ class _ARScannerScreenState extends State<ARScannerScreen>
     final reference = widget.continuationReference!;
     final start = _continuationSessionStart!;
     final end = _continuationSessionEnd!;
-    final midpoint = (start + end) / 2.0;
+    final sessionOrigin = reference.startEndpoint ==
+            ContinuationStartEndpoint.start
+        ? start
+        : end;
     final tangent = vector.Vector2(
       end.x - start.x,
       end.z - start.z,
@@ -866,13 +867,13 @@ class _ARScannerScreenState extends State<ARScannerScreen>
         : vector.Vector2(tangent.y, -tangent.x);
     final right = vector.Vector2(forward.y, -forward.x);
     final relative = vector.Vector2(
-      sessionPoint.x - midpoint.x,
-      sessionPoint.z - midpoint.z,
+      sessionPoint.x - sessionOrigin.x,
+      sessionPoint.z - sessionOrigin.z,
     );
 
     return vector.Vector3(
       relative.dot(right),
-      sessionPoint.y - midpoint.y,
+      sessionPoint.y - sessionOrigin.y,
       relative.dot(forward),
     );
   }
