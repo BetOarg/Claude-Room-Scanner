@@ -341,27 +341,52 @@ class _FloorPlanViewerScreenState
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
-          title: const Text('Ubicación del nuevo ambiente'),
-          content: const Text(
-            'Observando la abertura desde su primer extremo hacia el segundo, '
-            '¿de qué lado se encuentra el ambiente que vas a escanear?',
+          title: const Text('¿Hacia dónde continúa el plano?'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'La abertura se representa desde A hacia B. Elegí la flecha '
+                'que apunta al ambiente que vas a escanear.',
+              ),
+              const SizedBox(height: 16),
+              const SizedBox(
+                width: 240,
+                height: 120,
+                child: CustomPaint(
+                  painter: _OpeningDirectionPainter(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () => Navigator.pop(
+                    dialogContext,
+                    OpeningConnectionSide.left,
+                  ),
+                  icon: const Icon(Icons.arrow_upward),
+                  label: const Text('Elegir flecha superior'),
+                ),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: () => Navigator.pop(
+                    dialogContext,
+                    OpeningConnectionSide.right,
+                  ),
+                  icon: const Icon(Icons.arrow_downward),
+                  label: const Text('Elegir flecha inferior'),
+                ),
+              ),
+            ],
           ),
           actions: [
-            TextButton.icon(
-              onPressed: () => Navigator.pop(
-                dialogContext,
-                OpeningConnectionSide.left,
-              ),
-              icon: const Icon(Icons.arrow_back),
-              label: const Text('Izquierda'),
-            ),
-            FilledButton.icon(
-              onPressed: () => Navigator.pop(
-                dialogContext,
-                OpeningConnectionSide.right,
-              ),
-              icon: const Icon(Icons.arrow_forward),
-              label: const Text('Derecha'),
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancelar'),
             ),
           ],
         );
@@ -816,7 +841,6 @@ class _FloorPlanViewerScreenState
   // ===========================================================================
   // PUERTAS / VENTANAS
   // ===========================================================================
-
   Future<void>
       _showAddFeatureMenu({
     required String roomId,
@@ -1367,6 +1391,84 @@ class _FeatureSelection {
   });
 }
 
+class _OpeningDirectionPainter extends CustomPainter {
+  const _OpeningDirectionPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final centerY = size.height / 2.0;
+    final start = Offset(38, centerY);
+    final end = Offset(size.width - 38, centerY);
+    final midpoint = Offset(size.width / 2.0, centerY);
+
+    final openingPaint = Paint()
+      ..color = const Color(0xFFFF8A00)
+      ..strokeWidth = 7
+      ..strokeCap = StrokeCap.round;
+    final arrowPaint = Paint()
+      ..color = const Color(0xFF00C853)
+      ..strokeWidth = 4
+      ..strokeCap = StrokeCap.round;
+
+    canvas.drawLine(start, end, openingPaint);
+    _drawArrow(
+      canvas,
+      midpoint,
+      midpoint.translate(0, -42),
+      arrowPaint,
+    );
+    _drawArrow(
+      canvas,
+      midpoint,
+      midpoint.translate(0, 42),
+      arrowPaint,
+    );
+    _drawLabel(canvas, 'A', start.translate(-18, -10));
+    _drawLabel(canvas, 'B', end.translate(8, -10));
+  }
+
+  void _drawArrow(
+    Canvas canvas,
+    Offset start,
+    Offset end,
+    Paint paint,
+  ) {
+    canvas.drawLine(start, end, paint);
+    final direction = end.dy < start.dy ? -1.0 : 1.0;
+    canvas.drawLine(
+      end,
+      end.translate(-8, -10 * direction),
+      paint,
+    );
+    canvas.drawLine(
+      end,
+      end.translate(8, -10 * direction),
+      paint,
+    );
+  }
+
+  void _drawLabel(Canvas canvas, String text, Offset position) {
+    final painter = TextPainter(
+      text: TextSpan(
+        text: text,
+        style: const TextStyle(
+          color: Colors.black87,
+          fontSize: 16,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+
+    painter.paint(canvas, position);
+  }
+
+  @override
+  bool shouldRepaint(
+    covariant _OpeningDirectionPainter oldDelegate,
+  ) => false;
+}
+
 class _EmptyPlanView extends StatelessWidget {
   const _EmptyPlanView();
 
@@ -1420,7 +1522,6 @@ class _EmptyPlanView extends StatelessWidget {
 // =============================================================================
 // PAINTER
 // =============================================================================
-
 class FloorPlanPainter
     extends CustomPainter {
   final List<RoomModel> rooms;
@@ -1798,8 +1899,56 @@ class FloorPlanPainter
           7.0,
           referencePaint,
         );
+        _drawEndpointLabel(
+          canvas,
+          'A',
+          start,
+        );
+        _drawEndpointLabel(
+          canvas,
+          'B',
+          end,
+        );
       }
     }
+  }
+
+  void _drawEndpointLabel(
+    Canvas canvas,
+    String label,
+    Offset point,
+  ) {
+    final textPainter = TextPainter(
+      text: TextSpan(
+        text: label,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+
+    final center = point.translate(0, -18);
+    final rect = Rect.fromCenter(
+      center: center,
+      width: 22,
+      height: 22,
+    );
+
+    canvas.drawCircle(
+      center,
+      11,
+      Paint()..color = const Color(0xFF00C853),
+    );
+    textPainter.paint(
+      canvas,
+      Offset(
+        rect.center.dx - textPainter.width / 2,
+        rect.center.dy - textPainter.height / 2,
+      ),
+    );
   }
 
   // ===========================================================================
