@@ -446,7 +446,6 @@ class _BasicScannerScreenState
       ),
     );
   }
-
   Widget _buildScannerOverlay(
     ScannerProvider provider,
   ) {
@@ -473,6 +472,9 @@ class _BasicScannerScreenState
 
     final count =
         provider.currentPointsCount;
+
+    final continuation =
+        widget.continuationReference;
 
     return Positioned(
       top:
@@ -532,6 +534,40 @@ class _BasicScannerScreenState
           const SizedBox(
             height: 8,
           ),
+          if (continuation != null) ...[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(
+                horizontal: 14,
+                vertical: 10,
+              ),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFF8A00).withValues(
+                  alpha: 0.88,
+                ),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: const Row(
+                children: [
+                  Icon(
+                    Icons.add_road_rounded,
+                    color: Colors.white,
+                  ),
+                  SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Continuación desde una abertura',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
           Container(
             width: double.infinity,
             padding:
@@ -556,8 +592,10 @@ class _BasicScannerScreenState
             ),
             child: Row(
               children: [
-                const Icon(
-                  Icons.info_outline,
+                Icon(
+                  continuation != null
+                      ? Icons.navigation_outlined
+                      : Icons.info_outline,
                   color:
                       Colors.white70,
                   size: 18,
@@ -568,7 +606,9 @@ class _BasicScannerScreenState
                 Expanded(
                   child: Text(
                     count == 0
-                        ? 'Marcá el punto inicial de la habitación.'
+                        ? continuation != null
+                            ? 'Ubicate en la abertura mirando hacia el ambiente nuevo y marcá el inicio.'
+                            : 'Marcá el punto inicial de la habitación.'
                         : 'Medí la distancia hasta la próxima esquina y elegí su dirección.',
                     style:
                         const TextStyle(
@@ -586,6 +626,7 @@ class _BasicScannerScreenState
       ),
     );
   }
+
   String _localizedRoomName(
     ScannerProvider provider,
     AppLocalizations l10n,
@@ -899,7 +940,6 @@ class _BasicScannerScreenState
       selected,
     );
   }
-
   Widget _hudIconButton({    required IconData icon,
     required String tooltip,
     required VoidCallback onPressed,
@@ -1122,6 +1162,7 @@ class _BasicScannerScreenState
       ),
     );
   }
+
   Widget _buildProgressIndicator(
     int count,
   ) {
@@ -1324,7 +1365,6 @@ class _BasicScannerScreenState
       ),
     );
   }
-
   Future<void> _capturePressed(
     ScannerProvider provider,
   ) async {
@@ -2172,6 +2212,28 @@ class _BasicScannerScreenState
 
     HapticFeedback.mediumImpact();
 
+    final continuation =
+        widget.continuationReference;
+
+    final floorPlanProvider =
+        context.read<FloorPlanProvider>();
+
+    if (continuation != null) {
+      final sourceFeature = floorPlanProvider.findFeature(
+        roomId: continuation.sourceRoomId,
+        featureId: continuation.featureId,
+      );
+
+      if (sourceFeature == null || sourceFeature.isConnected) {
+        _showValidationError(
+          sourceFeature == null
+              ? 'La abertura de referencia ya no existe.'
+              : 'La abertura ya conecta otro ambiente.',
+        );
+        return;
+      }
+    }
+
     final room =
         provider.closeCurrentRoom();
 
@@ -2183,16 +2245,32 @@ class _BasicScannerScreenState
       return;
     }
 
-    await context
-        .read<FloorPlanProvider>()
-        .addCompletedRoom(room);
+    final saved = continuation == null
+        ? true
+        : await floorPlanProvider.addCompletedRoomFromContinuation(
+            room: room,
+            reference: continuation,
+          );
+
+    if (continuation == null) {
+      await floorPlanProvider.addCompletedRoom(room);
+    }
+
+    if (!saved) {
+      _showValidationError(
+        'No se pudo conectar el ambiente con la abertura seleccionada.',
+      );
+      return;
+    }
 
     if (!mounted) {
       return;
     }
 
     _showMessage(
-      'Ambiente guardado correctamente.',
+      continuation == null
+          ? 'Ambiente guardado correctamente.'
+          : 'Ambiente conectado y alineado correctamente.',
     );
 
     Navigator.pop(context);
