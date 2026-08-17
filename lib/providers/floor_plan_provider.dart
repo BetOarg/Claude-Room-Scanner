@@ -317,9 +317,7 @@ class FloorPlanProvider extends ChangeNotifier {
     final translatedFeatures =
         room.features.map(
       (feature) {
-        return WallFeature(
-          id: feature.id,
-          type: feature.type,
+        return feature.copyWith(
           start: ARPoint(
             x:
                 feature.start.x +
@@ -572,6 +570,61 @@ class FloorPlanProvider extends ChangeNotifier {
   // PUERTAS Y VENTANAS
   // ===========================================================================
 
+  /// Busca una puerta o ventana persistida dentro de un ambiente.
+  ///
+  /// La búsqueda utiliza los identificadores estables del proyecto y no
+  /// depende de coordenadas de pantalla ni de una sesión AR determinada.
+  WallFeature? findFeature({
+    required String roomId,
+    required String featureId,
+  }) {
+    final roomIndex =
+        _completedRooms.indexWhere(
+      (room) => room.id == roomId,
+    );
+
+    if (roomIndex == -1) {
+      return null;
+    }
+
+    final room =
+        _completedRooms[roomIndex];
+
+    for (final feature in room.features) {
+      if (feature.id == featureId) {
+        return feature;
+      }
+    }
+
+    return null;
+  }
+
+  /// Construye la referencia común que utilizarán el plano 2D, Basic Scanner,
+  /// ARCore y ARKit para continuar el relevamiento desde una abertura.
+  ///
+  /// Devuelve `null` si el ambiente o la abertura ya no existen. Esto evita
+  /// iniciar un escaneo con una selección desactualizada.
+  ScanContinuationReference? createContinuationReference({
+    required String roomId,
+    required String featureId,
+    required OpeningConnectionSide side,
+  }) {
+    final feature = findFeature(
+      roomId: roomId,
+      featureId: featureId,
+    );
+
+    if (feature == null) {
+      return null;
+    }
+
+    return ScanContinuationReference.fromFeature(
+      sourceRoomId: roomId,
+      feature: feature,
+      side: side,
+    );
+  }
+
   Future<void> addFeatureToRoom(
     String roomId,
     FeatureType type,
@@ -585,9 +638,6 @@ class FloorPlanProvider extends ChangeNotifier {
     );
 
     if (index == -1) {
-      return;
-    }
-
     final room =
         _completedRooms[index];
 
@@ -1229,3 +1279,5 @@ class _RoomNormalizationResult {
     required this.changed,
   });
 }
+      return;
+    }
