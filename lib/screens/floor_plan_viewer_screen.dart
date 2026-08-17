@@ -5,6 +5,7 @@ import '../models/room_model.dart';
 import '../providers/floor_plan_provider.dart';
 import '../services/geometry_service.dart';
 import '../services/import_export_service.dart';
+import '../services/ar_check_service.dart';
 import 'measurement_editor_screen.dart';
 
 class FloorPlanViewerScreen extends StatefulWidget {
@@ -23,6 +24,9 @@ class _FloorPlanViewerScreenState
   double _minZ = 0.0;
   double _scale = 1.0;
   double _padding = 20.0;
+
+  String? _selectedRoomId;
+  String? _selectedFeatureId;
 
   // ===========================================================================
   // TRANSFORMACIÓN PLANO ↔ PANTALLA
@@ -175,6 +179,203 @@ class _FloorPlanViewerScreenState
     return null;
   }
 
+  _FeatureSelection? _getFeatureAtPosition(
+    Offset screenPosition,
+    List<RoomModel> rooms,
+  ) {
+    const touchTolerance = 18.0;
+
+    _FeatureSelection? nearest;
+    double nearestDistance = double.infinity;
+
+    for (final room in rooms.reversed) {
+      for (final feature in room.features) {
+        final distance = _distanceToSegment(
+          screenPosition,
+          _transformPoint(feature.start),
+          _transformPoint(feature.end),
+        );
+
+        if (distance <= touchTolerance &&
+            distance < nearestDistance) {
+          nearestDistance = distance;
+          nearest = _FeatureSelection(
+            roomId: room.id,
+            feature: feature,
+          );
+        }
+      }
+    }
+
+    return nearest;
+  }
+
+  double _distanceToSegment(
+    Offset point,
+    Offset start,
+    Offset end,
+  ) {
+    final segment = end - start;
+    final lengthSquared = segment.dx * segment.dx +
+        segment.dy * segment.dy;
+
+    if (lengthSquared <= 0.000001) {
+      return (point - start).distance;
+    }
+
+    final fromStart = point - start;
+    final rawT =
+        (fromStart.dx * segment.dx +
+                fromStart.dy * segment.dy) /
+            lengthSquared;
+    final t = rawT.clamp(0.0, 1.0).toDouble();
+    final projection = Offset(
+      start.dx + segment.dx * t,
+      start.dy + segment.dy * t,
+    );
+
+    return (point - projection).distance;
+  }
+
+  Future<void> _showFeatureMenu(
+    _FeatureSelection selection,
+  ) async {
+    setState(() {
+      _selectedRoomId = selection.roomId;
+      _selectedFeatureId = selection.feature.id;
+    });
+
+    final feature = selection.feature;
+    final label = feature.type == FeatureType.door
+        ? 'Puerta'
+        : 'Ventana';
+
+    final shouldContinue = await showModalBottomSheet<bool>(
+      context: context,
+      builder: (bottomSheetContext) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(
+                    feature.type == FeatureType.door
+                        ? Icons.door_front_door
+                        : Icons.window,
+                    color: feature.type == FeatureType.door
+                        ? const Color(0xFFFF8A00)
+                        : const Color(0xFFD500F9),
+                  ),
+                  title: Text('$label seleccionada'),
+                  subtitle: Text(
+                    '${feature.isConnected ? 'Conectada' : 'Disponible'} · '
+                    '${_featureWidth(feature).toStringAsFixed(2)} m',
+                  ),
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: feature.isConnected
+                        ? null
+                        : () => Navigator.pop(
+                              bottomSheetContext,
+                              true,
+                            ),
+                    icon: const Icon(Icons.add_road_rounded),
+                    label: Text(
+                      feature.isConnected
+                          ? 'Esta abertura ya conecta dos ambientes'
+                          : 'Continuar escaneo desde aquí',
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (!mounted) return;
+
+    if (shouldContinue != true) {
+      return;
+    }
+
+    final side = await _chooseConnectionSide();
+
+    if (!mounted || side == null) return;
+
+    final provider = context.read<FloorPlanProvider>();
+    final reference = provider.createContinuationReference(
+      roomId: selection.roomId,
+      featureId: feature.id,
+      side: side,
+    );
+
+    final projectUuid = provider.projectUuid;
+
+    if (reference == null || projectUuid == null) {
+      _showMessage(
+        'La abertura seleccionada ya no está disponible.',
+        error: true,
+      );
+      return;
+    }
+
+    await ArCheckService.abrirEscanerConValidacion(
+      context,
+      projectUuid: projectUuid,
+      projectName: provider.projectName,
+      continuationReference: reference,
+    );
+  }
+
+  Future<OpeningConnectionSide?> _chooseConnectionSide() {
+    return showDialog<OpeningConnectionSide>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Ubicación del nuevo ambiente'),
+          content: const Text(
+            'Observando la abertura desde su primer extremo hacia el segundo, '
+            '¿de qué lado se encuentra el ambiente que vas a escanear?',
+          ),
+          actions: [
+            TextButton.icon(
+              onPressed: () => Navigator.pop(
+                dialogContext,
+                OpeningConnectionSide.left,
+              ),
+              icon: const Icon(Icons.arrow_back),
+              label: const Text('Izquierda'),
+            ),
+            FilledButton.icon(
+              onPressed: () => Navigator.pop(
+                dialogContext,
+                OpeningConnectionSide.right,
+              ),
+              icon: const Icon(Icons.arrow_forward),
+              label: const Text('Derecha'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  double _featureWidth(WallFeature feature) {
+    return GeometryService.calculateDistance(
+      feature.start,
+      feature.end,
+    );
+  }
+
   // ===========================================================================
   // EDITOR DE MEDIDAS
   // ===========================================================================
@@ -290,8 +491,7 @@ class _FloorPlanViewerScreenState
   // BUILD
   // ===========================================================================
 
-  @override
-  Widget build(
+  @override  Widget build(
     BuildContext context,
   ) {
     return Scaffold(
@@ -449,6 +649,19 @@ class _FloorPlanViewerScreenState
                       onTapUp: (
                         details,
                       ) {
+                        final featureSelection =
+                            _getFeatureAtPosition(
+                          details.localPosition,
+                          rooms,
+                        );
+
+                        if (featureSelection != null) {
+                          _showFeatureMenu(
+                            featureSelection,
+                          );
+                          return;
+                        }
+
                         final planePoint =
                             _inverseTransform(
                           details
@@ -487,6 +700,10 @@ class _FloorPlanViewerScreenState
                                 rooms,
                             transform:
                                 _transformPoint,
+                            selectedRoomId:
+                                _selectedRoomId,
+                            selectedFeatureId:
+                                _selectedFeatureId,
                           ),
                         ),
                       ),
@@ -1117,7 +1334,6 @@ class _FloorPlanViewerScreenState
 // =============================================================================
 // ACCIONES
 // =============================================================================
-
 enum _FloorPlanAction {
   importJson,
   shareJson,
@@ -1138,6 +1354,16 @@ class _RoomListAction {
   const _RoomListAction({
     required this.type,
     this.roomId,
+  });
+}
+
+class _FeatureSelection {
+  final String roomId;
+  final WallFeature feature;
+
+  const _FeatureSelection({
+    required this.roomId,
+    required this.feature,
   });
 }
 
@@ -1203,9 +1429,14 @@ class FloorPlanPainter
     ARPoint,
   ) transform;
 
+  final String? selectedRoomId;
+  final String? selectedFeatureId;
+
   const FloorPlanPainter({
     required this.rooms,
     required this.transform,
+    this.selectedRoomId,
+    this.selectedFeatureId,
   });
 
   @override
@@ -1275,6 +1506,16 @@ class FloorPlanPainter
           ..strokeCap =
               StrokeCap.square;
 
+    final selectedPaint = Paint()
+      ..color = const Color(0xFF00C853)
+      ..strokeWidth = 11.0
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+
+    final referencePaint = Paint()
+      ..color = const Color(0xFF00C853)
+      ..style = PaintingStyle.fill;
+
     for (final room in rooms) {
       _drawRoom(
         canvas,
@@ -1294,6 +1535,8 @@ class FloorPlanPainter
         room,
         doorPaint,
         windowPaint,
+        selectedPaint,
+        referencePaint,
       );
     }
   }
@@ -1489,6 +1732,8 @@ class FloorPlanPainter
     RoomModel room,
     Paint doorPaint,
     Paint windowPaint,
+    Paint selectedPaint,
+    Paint referencePaint,
   ) {
     for (final feature
         in room.features) {
@@ -1501,6 +1746,18 @@ class FloorPlanPainter
           transform(
         feature.end,
       );
+
+      final isSelected =
+          room.id == selectedRoomId &&
+              feature.id == selectedFeatureId;
+
+      if (isSelected) {
+        canvas.drawLine(
+          start,
+          end,
+          selectedPaint,
+        );
+      }
 
       switch (feature.type) {
         case FeatureType.door:
@@ -1518,6 +1775,29 @@ class FloorPlanPainter
             windowPaint,
           );
           break;
+      }
+
+      if (isSelected) {
+        final midpoint = Offset(
+          (start.dx + end.dx) / 2.0,
+          (start.dy + end.dy) / 2.0,
+        );
+
+        canvas.drawCircle(
+          start,
+          5.0,
+          referencePaint,
+        );
+        canvas.drawCircle(
+          end,
+          5.0,
+          referencePaint,
+        );
+        canvas.drawCircle(
+          midpoint,
+          7.0,
+          referencePaint,
+        );
       }
     }
   }
