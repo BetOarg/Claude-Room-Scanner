@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../l10n/generated/app_localizations.dart';
+import '../l10n/room_type_localization.dart';
 import '../models/room_model.dart';
 import '../providers/floor_plan_provider.dart';
 import '../providers/scanner_provider.dart';
@@ -462,6 +464,9 @@ class _BasicScannerScreenState
   Widget _buildTopHud(
     ScannerProvider provider,
   ) {
+    final l10n =
+        AppLocalizations.of(context)!;
+
     final count =
         provider.currentPointsCount;
 
@@ -482,9 +487,10 @@ class _BasicScannerScreenState
                   icon:
                       Icons.architecture,
                   title:
-                      provider.currentRoom
-                              ?.name ??
-                          'Nuevo ambiente',
+                      _localizedRoomName(
+                    provider,
+                    l10n,
+                  ),
                   subtitle:
                       '$count esquinas',
                   onTap: () =>
@@ -500,7 +506,7 @@ class _BasicScannerScreenState
                 icon:
                     Icons.home_work_outlined,
                 tooltip:
-                    'Tipo de ambiente',
+                    l10n.roomType,
                 onPressed: () =>
                     _showRoomTypeSelector(
                   provider,
@@ -513,7 +519,7 @@ class _BasicScannerScreenState
                 icon:
                     Icons.map_outlined,
                 tooltip:
-                    'Ver plano',
+                    l10n.viewPlan,
                 onPressed:
                     _openFloorPlan,
               ),
@@ -575,6 +581,25 @@ class _BasicScannerScreenState
         ],
       ),
     );
+  }
+
+  String _localizedRoomName(
+    ScannerProvider provider,
+    AppLocalizations l10n,
+  ) {
+    final room =
+        provider.currentRoom;
+
+    if (room == null) {
+      return l10n.newRoom;
+    }
+
+    final defaultName =
+        room.type.displayName;
+
+    return room.name == defaultName
+        ? room.type.localizedName(l10n)
+        : room.name;
   }
 
   Widget _hudCard({
@@ -678,10 +703,13 @@ class _BasicScannerScreenState
   Future<void> _showCustomRoomNameDialog(
     ScannerProvider provider,
   ) async {
+    final l10n =
+        AppLocalizations.of(context)!;
+
     final controller =
         TextEditingController(
       text: provider.currentRoom?.name ??
-          provider.selectedType.displayName,
+          provider.selectedType.localizedName(l10n),
     );
 
     final name =
@@ -692,7 +720,7 @@ class _BasicScannerScreenState
       ) {
         return AlertDialog(
           title: const Text(
-            'Nombre del ambiente',
+            l10n.roomName,
           ),
           content: TextField(
             controller: controller,
@@ -703,9 +731,9 @@ class _BasicScannerScreenState
             decoration:
                 const InputDecoration(
               labelText:
-                  'Destino o nombre',
+                  l10n.roomDestination,
               hintText:
-                  'Ej.: Dormitorio de Ana',
+                  l10n.roomNameExample,
               border:
                   OutlineInputBorder(),
             ),
@@ -728,7 +756,7 @@ class _BasicScannerScreenState
                 dialogContext,
               ),
               child: const Text(
-                'Cancelar',
+                l10n.cancel,
               ),
             ),
             FilledButton(
@@ -746,7 +774,7 @@ class _BasicScannerScreenState
                 );
               },
               child: const Text(
-                'Guardar',
+                l10n.save,
               ),
             ),
           ],
@@ -759,7 +787,6 @@ class _BasicScannerScreenState
     );
 
     controller.dispose();
-
     if (!mounted ||
         name == null ||
         name.trim().isEmpty) {
@@ -774,6 +801,9 @@ class _BasicScannerScreenState
   Future<void> _showRoomTypeSelector(
     ScannerProvider provider,
   ) async {
+    final l10n =
+        AppLocalizations.of(context)!;
+
     final selected =
         await showModalBottomSheet<            RoomType>(
       context: context,
@@ -797,7 +827,7 @@ class _BasicScannerScreenState
                   CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'Tipo de ambiente',
+                  l10n.roomType,
                   style:
                       TextStyle(
                     fontSize: 20,
@@ -839,7 +869,7 @@ class _BasicScannerScreenState
                                   : null,
                         ),
                         title: Text(
-                          type.displayName,
+                          type.localizedName(l10n),
                         ),
                         onTap: () {
                           Navigator.pop(
@@ -962,13 +992,16 @@ class _BasicScannerScreenState
   }
 
   Widget _buildModeSelector() {
+    final l10n =
+        AppLocalizations.of(context)!;
+
     return Row(
       children: [
         Expanded(
           child: _modeButton(
             BasicAppMode.wall,
             Icons.wallpaper,
-            'Pared',
+            l10n.wall,
           ),
         ),
         const SizedBox(
@@ -978,7 +1011,7 @@ class _BasicScannerScreenState
           child: _modeButton(
             BasicAppMode.door,
             Icons.door_front_door,
-            'Puerta',
+            l10n.door,
           ),
         ),
         const SizedBox(
@@ -988,7 +1021,7 @@ class _BasicScannerScreenState
           child: _modeButton(
             BasicAppMode.window,
             Icons.window,
-            'Ventana',
+            l10n.window,
           ),
         ),
       ],
@@ -1183,23 +1216,26 @@ class _BasicScannerScreenState
   Widget _buildMainCaptureButton(
     ScannerProvider provider,
   ) {
+    final l10n =
+        AppLocalizations.of(context)!;
+
     final count =
         provider.currentPointsCount;
 
     final String label;
 
     if (_processing) {
-      label = 'CALCULANDO...';
+      label = l10n.calculating;
     } else if (count == 0) {
-      label = 'MARCAR INICIO';
+      label = l10n.markStart;
     } else if (_currentMode ==
         BasicAppMode.wall) {
-      label = 'MEDIR SIGUIENTE ESQUINA';
+      label = l10n.measureNextCorner;
     } else if (_currentMode ==
         BasicAppMode.door) {
-      label = 'UBICAR PUERTA';
+      label = l10n.placeDoor;
     } else {
-      label = 'UBICAR VENTANA';
+      label = l10n.placeWindow;
     }
 
     return SizedBox(
@@ -1540,8 +1576,7 @@ class _BasicScannerScreenState
         TextEditingController();
 
     final angleController =
-        TextEditingController(
-      text: '90',
+        TextEditingController(      text: '90',
     );
 
     final featureWidthController =
