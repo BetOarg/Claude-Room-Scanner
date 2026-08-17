@@ -228,7 +228,7 @@ class FloorPlanProvider extends ChangeNotifier {
   ///
   /// El contorno recibido utiliza coordenadas locales del scanner:
   ///
-  /// - el origen local se alinea con el punto medio de la abertura;
+  /// - el origen local se alinea con el extremo A o B elegido;
   /// - +Z apunta hacia el lado elegido para el nuevo ambiente;
   /// - +X conserva la dirección de 90° hacia la derecha.
   ///
@@ -354,7 +354,7 @@ class FloorPlanProvider extends ChangeNotifier {
 
     final rightX = forwardZ;
     final rightZ = -forwardX;
-    final origin = reference.midpoint;
+    final origin = reference.origin;
 
     ARPoint transformPoint(ARPoint point) {
       return ARPoint(
@@ -444,8 +444,7 @@ class FloorPlanProvider extends ChangeNotifier {
     await _persist();
   }
 
-  // ===========================================================================  // POSICIONAMIENTO GLOBAL
-  // ===========================================================================
+  // ===========================================================================  // POSICIONAMIENTO GLOBAL  // ===========================================================================
 
   /// Traslada una habitación completa.
   ///
@@ -760,6 +759,7 @@ class FloorPlanProvider extends ChangeNotifier {
     required String roomId,
     required String featureId,
     required OpeningConnectionSide side,
+    required ContinuationStartEndpoint startEndpoint,
   }) {
     final feature = findFeature(
       roomId: roomId,
@@ -774,6 +774,7 @@ class FloorPlanProvider extends ChangeNotifier {
       sourceRoomId: roomId,
       feature: feature,
       side: side,
+      startEndpoint: startEndpoint,
     );
   }
   Future<void> addFeatureToRoom(
@@ -906,8 +907,7 @@ class FloorPlanProvider extends ChangeNotifier {
           },
         )
         .toList();
-  }
-  // ===========================================================================
+  }  // ===========================================================================
   // REAJUSTE DE ABERTURAS
   // ===========================================================================
 
