@@ -107,7 +107,10 @@ class ScannerProvider extends ChangeNotifier {
   }
 
   /// Inicia un ambiente nuevo con un ID resistente a colisiones.
-  void startNewRoom() {
+  void startNewRoom({
+    List<ARPoint> initialPoints = const <ARPoint>[],
+    List<WallFeature> initialFeatures = const <WallFeature>[],
+  }) {
     _hasCustomRoomName = false;
 
     _currentRoom = RoomModel(
@@ -117,7 +120,8 @@ class ScannerProvider extends ChangeNotifier {
         _selectedType,
       ),
       type: _selectedType,
-      points: [],
+      points: List<ARPoint>.from(initialPoints),
+      features: List<WallFeature>.from(initialFeatures),
     );
 
     notifyListeners();
@@ -575,7 +579,6 @@ class ScannerProvider extends ChangeNotifier {
       '${measuredWidth.toStringAsFixed(2)} m.',
     );
   }
-
   void removeLastPoint() {
     if (_currentRoom == null ||
         _currentRoom!.points.isEmpty) {
