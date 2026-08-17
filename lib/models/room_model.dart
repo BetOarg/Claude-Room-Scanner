@@ -201,6 +201,62 @@ class WallFeature {
   }
 }
 
+/// Referencia global utilizada para continuar un escaneo desde una abertura.
+///
+/// Esta clase es independiente del tipo de scanner. El plano 2D la crea y
+/// [ArCheckService] la entrega al Basic Scanner o al scanner AR disponible.
+/// En Basic Scanner sus extremos globales permiten iniciar el ambiente ya
+/// alineado. En ARCore/ARKit se conservan como destino global mientras el
+/// usuario vuelve a marcar ambos extremos en la nueva sesión AR.
+class ScanContinuationReference {
+  final String sourceRoomId;
+  final String featureId;
+  final FeatureType featureType;
+  final ARPoint globalStart;
+  final ARPoint globalEnd;
+  final OpeningConnectionSide side;
+
+  const ScanContinuationReference({
+    required this.sourceRoomId,
+    required this.featureId,
+    required this.featureType,
+    required this.globalStart,
+    required this.globalEnd,
+    required this.side,
+  });
+
+  factory ScanContinuationReference.fromFeature({
+    required String sourceRoomId,
+    required WallFeature feature,
+    required OpeningConnectionSide side,
+  }) {
+    return ScanContinuationReference(
+      sourceRoomId: sourceRoomId,
+      featureId: feature.id,
+      featureType: feature.type,
+      globalStart: feature.start,
+      globalEnd: feature.end,
+      side: side,
+    );
+  }
+
+  ARPoint get midpoint {
+    return ARPoint(
+      x: (globalStart.x + globalEnd.x) / 2.0,
+      y: (globalStart.y + globalEnd.y) / 2.0,
+      z: (globalStart.z + globalEnd.z) / 2.0,
+    );
+  }
+
+  double get width {
+    final dx = globalEnd.x - globalStart.x;
+    final dy = globalEnd.y - globalStart.y;
+    final dz = globalEnd.z - globalStart.z;
+
+    return vector.Vector3(dx, dy, dz).length;
+  }
+}
+
 /// Habitación con su contorno y sus elementos.
 class RoomModel {
   final String id;
