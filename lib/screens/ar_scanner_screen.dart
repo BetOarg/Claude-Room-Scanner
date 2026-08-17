@@ -31,10 +31,17 @@ class ARScannerScreen extends StatefulWidget {
 
   final String projectName;
 
+  /// Abertura global seleccionada en el plano 2D para continuar el escaneo.
+  ///
+  /// En ARCore/ARKit sus extremos se utilizarán como destino global después
+  /// de que el usuario vuelva a marcar la abertura en la nueva sesión AR.
+  final ScanContinuationReference? continuationReference;
+
   const ARScannerScreen({
     super.key,
     required this.projectUuid,
     required this.projectName,
+    this.continuationReference,
   });
 
   @override
@@ -530,7 +537,8 @@ class _ARScannerScreenState extends State<ARScannerScreen>
                                   ? l10n.markSecondEnd
                                   : _currentMode ==
                                           AppMode.door
-                                      ? l10n.measureDoor
+                                     
+l10n.measureDoor
                                       : l10n.measureWindow,
                         ),
                         style:
@@ -706,8 +714,335 @@ class _ARScannerScreenState extends State<ARScannerScreen>
       name,
     );
   }
+  // ================================================================
+  // SELECTOR DE MODO
+  // ================================================================
+
+  Color _modeColor(
+    AppMode mode,
+  ) {
+    switch (mode) {
+      case AppMode.wall:
+        return const Color(
+          0xFF448AFF,
+        );
+
+      case AppMode.door:
+        return const Color(
+          0xFFFF8A00,
+        );
+
+      case AppMode.window:
+        return const Color(
+          0xFFD500F9,
+        );
+    }
+  }
+
+  Widget _buildModeChip(
+    AppMode mode,
+    IconData icon,
+    String label,
+  ) {
+    final isSelected = _currentMode == mode;
+
+    return ChoiceChip(      avatar: Icon(
+        icon,
+        size: 18,
+        color: isSelected
+            ? Colors.white
+            : Colors.white70,
+      ),
+      label: Text(label),
+      selected: isSelected,
+      selectedColor:
+          _modeColor(mode),
+      backgroundColor: Colors.black87,
+      labelStyle: TextStyle(
+        color: isSelected
+            ? Colors.white
+            : Colors.white70,
+        fontWeight: isSelected
+            ? FontWeight.bold
+            : FontWeight.normal,
+      ),
+      onSelected: (selected) {
+        if (!selected) return;
+
+        HapticFeedback.selectionClick();
+
+        setState(() {
+          _currentMode = mode;
+          _pendingFeatureStart = null;
+          _pendingFeatureMode = null;
+        });
+      },
+    );
+  }
 
   // ================================================================
+  // CAPTURA DE PUNTOS / ABERTURAS
+  // ================================================================
+
+  Future<void> _onCapturePressed(
+    ScannerProvider provider,
+  ) async {
+    HapticFeedback.lightImpact();
+
+    final pos =
+        await _getCurrentCameraPosition();
+
+    if (!mounted) return;
+
+    if (pos == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'No se detectó una posición de cámara válida. '
+            'Apunta a una superficie reconocida e intenta de nuevo.',
+          ),
+          backgroundColor: Colors.orange,
+        ),
+      );
+
+      return;
+    }
+
+    switch (_currentMode) {
+      case AppMode.wall:
+        _handleWallPoint(provider, pos);
+        break;
+
+      case AppMode.door:
+      case AppMode.window:
+        _handleFeatureInsertion(
+          provider,
+          _currentMode,
+          pos,
+        );
+        break;
+    }
+  }
+
+  void _handleWallPoint(
+    ScannerProvider provider,
+    vector.Vector3 pos,
+  ) {
+    final ValidationResult result =
+        provider.tryAddPoint(
+      pos.x,
+      pos.y,
+      pos.z,
+    );
+
+    if (!result.isValid) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            result.errorMessage ??
+                'Punto inválido.',
+          ),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+
+      return;
+    }
+
+    if (result.warningMessage != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            result.warningMessage!,
+          ),
+          backgroundColor:
+              Colors.amber.shade800,
+          duration:
+              const Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  void _handleFeatureInsertion(
+    ScannerProvider provider,
+    AppMode mode,
+    vector.Vector3 position,
+  ) {
+    if (provider.currentPointsCount < 2) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Necesitas marcar al menos 2 esquinas '
+            'antes de medir una abertura.',
+          ),
+          backgroundColor: Colors.orange,
+        ),
+      );
+
+      return;
+    }
+
+    final currentPoint =
+        ARPoint(
+      x: position.x,
+      y: position.y,
+      z: position.z,
+    );
+
+    final label =
+        mode == AppMode.door
+            ? 'Puerta'
+            : 'Ventana';
+
+    final pendingStart =
+        _pendingFeatureStart;
+
+    if (pendingStart == null ||
+        _pendingFeatureMode !=
+            mode) {
+      setState(() {
+        _pendingFeatureStart =
+            currentPoint;
+        _pendingFeatureMode =
+            mode;
+      });
+
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              'Inicio de $label registrado. '
+              'Ubicá la cámara en el otro extremo y volvé a pulsar.',
+            ),
+            duration:
+                const Duration(
+              seconds: 3,
+            ),
+          ),
+        );
+
+      return;
+    }
+
+    final featureType =
+        mode == AppMode.door
+            ? FeatureType.door
+            : FeatureType.window;
+
+    final result =
+        provider
+            .addFeatureToCurrentRoom(
+      featureType,
+      pendingStart,
+      endLocation:
+          currentPoint,
+    );
+
+    setState(() {
+      _pendingFeatureStart = null;
+      _pendingFeatureMode = null;
+    });
+
+    if (!result.isValid) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              result.errorMessage ??
+                  'No se pudo medir la abertura.',
+            ),
+            backgroundColor:
+                Colors.redAccent,
+          ),
+        );
+
+      return;
+    }
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            '$label guardada. '
+            '${result.warningMessage ?? ''}',
+          ),
+          duration:
+              const Duration(
+            seconds: 2,
+          ),
+        ),
+      );
+  }
+
+  // ================================================================
+  // CIERRE Y PERSISTENCIA DE LA HABITACIÓN
+  // ================================================================
+
+  Future<void> _onCloseRoomPressed(
+    ScannerProvider provider,
+  ) async {
+    HapticFeedback.mediumImpact();
+
+    final closedRoom =
+        provider.closeCurrentRoom();
+
+    if (!mounted) return;
+
+    if (closedRoom == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            provider.lastCloseError ??
+                'No se pudo cerrar la habitación. '
+                'Revisa los puntos trazados.',
+          ),
+          backgroundColor:
+              Colors.redAccent,
+        ),
+      );
+
+      return;
+    }
+
+    // Persistir inmediatamente.
+    await context
+        .read<FloorPlanProvider>()
+        .addCompletedRoom(
+          closedRoom,
+        );
+
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          '¡Ambiente guardado correctamente!',
+        ),
+        backgroundColor: Colors.green,
+      ),
+    );
+
+    Navigator.pop(context);
+  }
+
+  // ================================================================
+  // PLANO
+  // ================================================================
+
+  void _openFloorPlan() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            const FloorPlanViewerScreen(),
+      ),
+    );
+  }
+}  // ================================================================
   // SELECTOR DE MODO
   // ================================================================
 
