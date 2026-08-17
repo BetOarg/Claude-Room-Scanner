@@ -719,7 +719,7 @@ class _BasicScannerScreenState
         dialogContext,
       ) {
         return AlertDialog(
-          title: const Text(
+          title: Text(
             l10n.roomName,
           ),
           content: TextField(
@@ -729,7 +729,7 @@ class _BasicScannerScreenState
                 TextCapitalization.sentences,
             maxLength: 60,
             decoration:
-                const InputDecoration(
+                InputDecoration(
               labelText:
                   l10n.roomDestination,
               hintText:
@@ -755,7 +755,7 @@ class _BasicScannerScreenState
                   Navigator.pop(
                 dialogContext,
               ),
-              child: const Text(
+              child: Text(
                 l10n.cancel,
               ),
             ),
@@ -773,7 +773,7 @@ class _BasicScannerScreenState
                   normalized,
                 );
               },
-              child: const Text(
+              child: Text(
                 l10n.save,
               ),
             ),
@@ -786,8 +786,7 @@ class _BasicScannerScreenState
       kThemeAnimationDuration,
     );
 
-    controller.dispose();
-    if (!mounted ||
+    controller.dispose();    if (!mounted ||
         name == null ||
         name.trim().isEmpty) {
       return;
@@ -826,7 +825,7 @@ class _BasicScannerScreenState
               crossAxisAlignment:
                   CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   l10n.roomType,
                   style:
                       TextStyle(
@@ -1575,8 +1574,7 @@ class _BasicScannerScreenState
     final distanceController =
         TextEditingController();
 
-    final angleController =
-        TextEditingController(      text: '90',
+    final angleController =        TextEditingController(      text: '90',
     );
 
     final featureWidthController =
