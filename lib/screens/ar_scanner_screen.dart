@@ -9,6 +9,8 @@ import 'package:ar_flutter_plugin_2/managers/ar_object_manager.dart';
 import 'package:ar_flutter_plugin_2/managers/ar_anchor_manager.dart';
 import 'package:vector_math/vector_math_64.dart' as vector;
 
+import '../l10n/generated/app_localizations.dart';
+import '../l10n/room_type_localization.dart';
 import '../models/room_model.dart';
 import '../providers/floor_plan_provider.dart';
 import '../providers/scanner_provider.dart';
@@ -221,6 +223,7 @@ class _ARScannerScreenState extends State<ARScannerScreen>
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<ScannerProvider>();
+    final l10n = AppLocalizations.of(context)!;
 
     if (_checkingPermissions) {
       return const Scaffold(
@@ -299,15 +302,17 @@ class _ARScannerScreenState extends State<ARScannerScreen>
               children: [
                 ActionChip(
                   tooltip:
-                      'Editar nombre del ambiente',
+                      l10n.editRoomName,
                   avatar: const Icon(
                     Icons.edit_outlined,
                     size: 16,
                     color: Colors.white,
                   ),
                   label: Text(
-                    provider.currentRoom?.name ??
-                        'Nuevo ambiente',
+                    _localizedRoomName(
+                      provider,
+                      l10n,
+                    ),
                   ),
                   onPressed: () =>
                       _showCustomRoomNameDialog(
@@ -323,7 +328,7 @@ class _ARScannerScreenState extends State<ARScannerScreen>
                 Row(
                   children: [
                     IconButton.filledTonal(
-                      tooltip: 'Ver plano del proyecto',
+                      tooltip: l10n.viewPlan,
                       onPressed: _openFloorPlan,
                       icon: const Icon(
                         Icons.map_outlined,
@@ -340,8 +345,7 @@ class _ARScannerScreenState extends State<ARScannerScreen>
                         size: 10,
                         color: provider.isTrackingOk
                             ? Colors.greenAccent
-                            : Colors.orangeAccent,
-                      ),
+                            : Colors.orangeAccent,                      ),
                       label: Text(
                         provider.isTrackingOk
                             ? 'AR Activo'
@@ -409,19 +413,19 @@ class _ARScannerScreenState extends State<ARScannerScreen>
                     _buildModeChip(
                       AppMode.wall,
                       Icons.wallpaper,
-                      'Pared',
+                      l10n.wall,
                     ),
                     const SizedBox(width: 8),
                     _buildModeChip(
                       AppMode.door,
                       Icons.door_front_door,
-                      'Puerta',
+                      l10n.door,
                     ),
                     const SizedBox(width: 8),
                     _buildModeChip(
                       AppMode.window,
                       Icons.window,
-                      'Ventana',
+                      l10n.window,
                     ),
                   ],
                 ),
@@ -445,7 +449,7 @@ class _ARScannerScreenState extends State<ARScannerScreen>
                         ),
                         child: ChoiceChip(
                           label: Text(
-                            type.displayName.toUpperCase(),
+                            type.localizedName(l10n).toUpperCase(),
                           ),
                           selected: isSelected,
                           selectedColor:
@@ -521,14 +525,14 @@ class _ARScannerScreenState extends State<ARScannerScreen>
                         label: Text(
                           _currentMode ==
                                   AppMode.wall
-                              ? 'AÑADIR ESQUINA'
+                              ? l10n.addCorner
                               : _pendingFeatureStart !=
                                       null
-                                  ? 'MARCAR SEGUNDO EXTREMO'
+                                  ? l10n.markSecondEnd
                                   : _currentMode ==
                                           AppMode.door
-                                      ? 'MEDIR PUERTA'
-                                      : 'MEDIR VENTANA',
+                                      ? l10n.measureDoor
+                                      : l10n.measureWindow,
                         ),
                         style:
                             ElevatedButton.styleFrom(
@@ -588,13 +592,35 @@ class _ARScannerScreenState extends State<ARScannerScreen>
     );
   }
 
+  String _localizedRoomName(
+    ScannerProvider provider,
+    AppLocalizations l10n,
+  ) {
+    final room =
+        provider.currentRoom;
+
+    if (room == null) {
+      return l10n.newRoom;
+    }
+
+    final defaultName =
+        room.type.displayName;
+
+    return room.name == defaultName
+        ? room.type.localizedName(l10n)
+        : room.name;
+  }
+
   Future<void> _showCustomRoomNameDialog(
     ScannerProvider provider,
   ) async {
+    final l10n =
+        AppLocalizations.of(context)!;
+
     final controller =
         TextEditingController(
       text: provider.currentRoom?.name ??
-          provider.selectedType.displayName,
+          provider.selectedType.localizedName(l10n),
     );
 
     final name =
@@ -605,7 +631,7 @@ class _ARScannerScreenState extends State<ARScannerScreen>
       ) {
         return AlertDialog(
           title: const Text(
-            'Nombre del ambiente',
+            l10n.roomName,
           ),
           content: TextField(
             controller: controller,
@@ -616,9 +642,9 @@ class _ARScannerScreenState extends State<ARScannerScreen>
             decoration:
                 const InputDecoration(
               labelText:
-                  'Destino o nombre',
+                  l10n.roomDestination,
               hintText:
-                  'Ej.: Dormitorio de Ana',
+                  l10n.roomNameExample,
               border:
                   OutlineInputBorder(),
             ),
@@ -641,7 +667,7 @@ class _ARScannerScreenState extends State<ARScannerScreen>
                 dialogContext,
               ),
               child: const Text(
-                'Cancelar',
+                l10n.cancel,
               ),
             ),
             FilledButton(
@@ -659,14 +685,13 @@ class _ARScannerScreenState extends State<ARScannerScreen>
                 );
               },
               child: const Text(
-                'Guardar',
+                l10n.save,
               ),
             ),
           ],
         );
       },
     );
-
     await Future<void>.delayed(
       kThemeAnimationDuration,
     );
