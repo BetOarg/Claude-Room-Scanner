@@ -624,7 +624,6 @@ class FloorPlanProvider extends ChangeNotifier {
       side: side,
     );
   }
-
   Future<void> addFeatureToRoom(
     String roomId,
     FeatureType type,
@@ -638,6 +637,9 @@ class FloorPlanProvider extends ChangeNotifier {
     );
 
     if (index == -1) {
+      return;
+    }
+
     final room =
         _completedRooms[index];
 
@@ -1279,5 +1281,3 @@ class _RoomNormalizationResult {
     required this.changed,
   });
 }
-      return;
-    }
