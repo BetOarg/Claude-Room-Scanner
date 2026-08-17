@@ -71,6 +71,12 @@ enum OpeningConnectionSide {
   right,
 }
 
+/// Extremo de la abertura desde el que comienza el nuevo relevamiento.
+enum ContinuationStartEndpoint {
+  start,
+  end,
+}
+
 /// Punto en el espacio 3D.
 class ARPoint {
   final double x;
@@ -215,6 +221,7 @@ class ScanContinuationReference {
   final ARPoint globalStart;
   final ARPoint globalEnd;
   final OpeningConnectionSide side;
+  final ContinuationStartEndpoint startEndpoint;
 
   const ScanContinuationReference({
     required this.sourceRoomId,
@@ -223,12 +230,14 @@ class ScanContinuationReference {
     required this.globalStart,
     required this.globalEnd,
     required this.side,
+    required this.startEndpoint,
   });
 
   factory ScanContinuationReference.fromFeature({
     required String sourceRoomId,
     required WallFeature feature,
     required OpeningConnectionSide side,
+    required ContinuationStartEndpoint startEndpoint,
   }) {
     return ScanContinuationReference(
       sourceRoomId: sourceRoomId,
@@ -237,6 +246,7 @@ class ScanContinuationReference {
       globalStart: feature.start,
       globalEnd: feature.end,
       side: side,
+      startEndpoint: startEndpoint,
     );
   }
 
@@ -247,6 +257,12 @@ class ScanContinuationReference {
       z: (globalStart.z + globalEnd.z) / 2.0,
     );
   }
+
+  /// Punto global que se utiliza como origen local del nuevo escaneo.
+  ARPoint get origin =>
+      startEndpoint == ContinuationStartEndpoint.start
+          ? globalStart
+          : globalEnd;
 
   double get width {
     final dx = globalEnd.x - globalStart.x;
