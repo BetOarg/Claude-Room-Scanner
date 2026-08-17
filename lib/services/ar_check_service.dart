@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../models/room_model.dart';
 import '../scanner/engine/scanner_capabilities.dart';
 import '../scanner/services/device_capabilities_service.dart';
 import '../screens/ar_scanner_screen.dart';
@@ -19,6 +20,7 @@ class ArCheckService {
     BuildContext context, {
     required String projectUuid,
     required String projectName,
+    ScanContinuationReference? continuationReference,
   }) async {
     try {
       final capabilities =
@@ -32,11 +34,13 @@ class ArCheckService {
         scannerScreen = ARScannerScreen(
           projectUuid: projectUuid,
           projectName: projectName,
+          continuationReference: continuationReference,
         );
       } else if (capabilities.supportsBasicScanner) {
         scannerScreen = BasicScannerScreen(
           projectUuid: projectUuid,
           projectName: projectName,
+          continuationReference: continuationReference,
         );
       } else {
         _mostrarAvisoNoSoportado(
