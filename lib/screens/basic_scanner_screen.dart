@@ -58,6 +58,8 @@ class _BasicScannerScreenState
   bool _changingLifecycle = false;
   bool _shouldResumeCamera = false;
 
+  double _lastAngleDegrees = 90.0;
+
   String? _initializationError;
 
   @override
@@ -584,7 +586,6 @@ class _BasicScannerScreenState
       ),
     );
   }
-
   String _localizedRoomName(
     ScannerProvider provider,
     AppLocalizations l10n,
@@ -798,6 +799,7 @@ class _BasicScannerScreenState
       name,
     );
   }
+
   Future<void> _showRoomTypeSelector(
     ScannerProvider provider,
   ) async {
@@ -1120,7 +1122,6 @@ class _BasicScannerScreenState
       ),
     );
   }
-
   Widget _buildProgressIndicator(
     int count,
   ) {
@@ -1574,7 +1575,8 @@ class _BasicScannerScreenState
     final distanceController =
         TextEditingController();
 
-    final angleController =        TextEditingController(      text: '90',
+    final angleController = TextEditingController(
+      text: _formatAngle(_lastAngleDegrees),
     );
 
     final featureWidthController =
@@ -1688,7 +1690,13 @@ class _BasicScannerScreenState
                     ),
                     TextField(
                       controller:
-                          angleController,                      keyboardType:
+                          angleController,
+                      onChanged: (_) {
+                        setDialogState(() {
+                          angleError = null;
+                        });
+                      },
+                      keyboardType:
                           const TextInputType
                               .numberWithOptions(
                         decimal: true,
@@ -1755,7 +1763,7 @@ class _BasicScannerScreenState
                       height: 12,
                     ),
                     const Text(
-                      'Dirección absoluta:',
+                      'Dirección rápida:',
                       style:
                           TextStyle(
                         fontWeight:
@@ -1770,42 +1778,101 @@ class _BasicScannerScreenState
                       spacing: 6,
                       runSpacing: 6,
                       children: [
-                        _angleChip('0°',
+                        _angleChip(
+                          'Frente',
+                          Icons.arrow_upward,
                           0,
                           angleController,
                           setDialogState,
                         ),
                         _angleChip(
-                          '90°',
+                          'Derecha',
+                          Icons.arrow_forward,
                           90,
                           angleController,
                           setDialogState,
                         ),
                         _angleChip(
-                          '180°',
+                          'Atrás',
+                          Icons.arrow_downward,
                           180,
                           angleController,
                           setDialogState,
                         ),
                         _angleChip(
-                          '270°',
+                          'Izquierda',
+                          Icons.arrow_back,
                           270,
                           angleController,
                           setDialogState,
                         ),
                       ],
                     ),
-                    const SizedBox(
-                      height: 12,
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => _adjustAngle(
+                              angleController,
+                              -5.0,
+                              setDialogState,
+                            ),
+                            child: const Text('-5°'),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => _adjustAngle(
+                              angleController,
+                              -1.0,
+                              setDialogState,
+                            ),
+                            child: const Text('-1°'),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => _adjustAngle(
+                              angleController,
+                              1.0,
+                              setDialogState,
+                            ),
+                            child: const Text('+1°'),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => _adjustAngle(
+                              angleController,
+                              5.0,
+                              setDialogState,
+                            ),
+                            child: const Text('+5°'),
+                          ),
+                        ),
+                      ],
                     ),
-                    const Text(
-                      '0° adelante · 90° derecha · '
-                      '180° atrás · 270° izquierda',
-                      style:
-                          TextStyle(
-                        color:
-                            Colors.black54,
-                        fontSize: 11,
+                    const SizedBox(height: 10),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.05),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        _directionPreview(angleController.text),
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
                     const SizedBox(
@@ -1892,13 +1959,15 @@ class _BasicScannerScreenState
                       return;
                     }
 
+                    _lastAngleDegrees = _normalizeAngle(angle);
+
                     Navigator.pop(
                       dialogContext,
                       _BasicMeasurement(
                         distance:
                             distance,
                         angle:
-                            angle,
+                            _lastAngleDegrees,
                         featureWidth:
                             featureWidth,
                       ),
@@ -1923,19 +1992,77 @@ class _BasicScannerScreenState
 
   Widget _angleChip(
     String label,
+    IconData icon,
     double value,
     TextEditingController controller,
     StateSetter setDialogState,
   ) {
     return ActionChip(
-      label: Text(label),
+      avatar: Icon(icon, size: 18),
+      label: Text('$label ${value.toStringAsFixed(0)}°'),
       onPressed: () {
-        controller.text =
-            value.toStringAsFixed(0);
+        controller.text = _formatAngle(value);
 
         setDialogState(() {});
       },
     );
+  }
+
+  void _adjustAngle(
+    TextEditingController controller,
+    double delta,
+    StateSetter setDialogState,
+  ) {
+    final current = _parseNumber(controller.text) ?? 0.0;
+    controller.text = _formatAngle(
+      _normalizeAngle(current + delta),
+    );
+    setDialogState(() {});
+  }
+
+  double _normalizeAngle(double value) {
+    final normalized = value % 360.0;
+    return normalized < 0 ? normalized + 360.0 : normalized;
+  }
+
+  String _formatAngle(double value) {
+    final normalized = _normalizeAngle(value);
+
+    if (normalized == normalized.roundToDouble()) {
+      return normalized.toStringAsFixed(0);
+    }
+
+    return normalized
+        .toStringAsFixed(2)
+        .replaceFirst(RegExp(r'0+$'), '')
+        .replaceFirst(RegExp(r'\.$'), '')
+        .replaceAll('.', ',');
+  }
+
+  String _directionPreview(String rawValue) {
+    final parsed = _parseNumber(rawValue);
+
+    if (parsed == null) {
+      return 'Ingresá un ángulo válido';
+    }
+
+    final angle = _normalizeAngle(parsed);
+    const tolerance = 0.001;
+
+    if ((angle - 0.0).abs() < tolerance) {
+      return '↑ Frente · 0°';
+    }
+    if ((angle - 90.0).abs() < tolerance) {
+      return '→ Derecha · 90°';
+    }
+    if ((angle - 180.0).abs() < tolerance) {
+      return '↓ Atrás · 180°';
+    }
+    if ((angle - 270.0).abs() < tolerance) {
+      return '← Izquierda · 270°';
+    }
+
+    return 'Dirección personalizada · ${_formatAngle(angle)}°';
   }
 
   double? _parseNumber(
@@ -1993,7 +2120,6 @@ class _BasicScannerScreenState
       normalized,
     );
   }
-
   void _showValidationError(
     String message,
   ) {
