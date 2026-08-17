@@ -59,7 +59,7 @@ class RoomScannerApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       onGenerateTitle: (context) =>
-          AppLocalizations.of(context).appTitle,
+          AppLocalizations.of(context)!.appTitle,
       debugShowCheckedModeBanner: false,
       localizationsDelegates: const [
         AppLocalizations.delegate,
