@@ -77,6 +77,9 @@ jobs:
       - name: Get dependencies
         run: flutter pub get
 
+      - name: Generate Flutter localizations
+        run: flutter gen-l10n
+
       - name: Generate Isar / Build Runner code
         run: dart run build_runner build --delete-conflicting-outputs
 
@@ -90,6 +93,7 @@ jobs:
         run: |
           flutter clean
           flutter pub get
+          flutter gen-l10n
           dart run build_runner build --delete-conflicting-outputs
           flutter build apk --debug
 
@@ -111,6 +115,9 @@ jobs:
       - name: Get dependencies
         run: flutter pub get
 
+      - name: Generate Flutter localizations
+        run: flutter gen-l10n
+
       - name: Generate Isar / Build Runner code
         run: dart run build_runner build --delete-conflicting-outputs
 
@@ -118,5 +125,6 @@ jobs:
         run: |
           flutter clean
           flutter pub get
+          flutter gen-l10n
           dart run build_runner build --delete-conflicting-outputs
           flutter build ios --config-only --no-codesign --debug
