@@ -61,6 +61,16 @@ enum FeatureType {
   window,
 }
 
+/// Lado de la abertura en el que se encuentra el ambiente por escanear.
+///
+/// Se interpreta observando la abertura desde [WallFeature.start] hacia
+/// [WallFeature.end]. Esta convención permite reconstruir la orientación
+/// elegida aunque el proyecto se cierre y vuelva a abrirse.
+enum OpeningConnectionSide {
+  left,
+  right,
+}
+
 /// Punto en el espacio 3D.
 class ARPoint {
   final double x;
@@ -95,29 +105,55 @@ class ARPoint {
     Map<String, dynamic> json,
   ) {
     return ARPoint(
-      x: (json['x'] as num)
-          .toDouble(),
-      y: (json['y'] as num)
-          .toDouble(),
-      z: (json['z'] as num)
-          .toDouble(),
+      x: (json['x'] as num).toDouble(),
+      y: (json['y'] as num).toDouble(),
+      z: (json['z'] as num).toDouble(),
     );
   }
 }
 
 /// Representa una puerta o ventana sobre una pared.
+///
+/// Cuando la abertura se utiliza para continuar el escaneo, ambos ambientes
+/// conservan el mismo [id]. [connectedRoomId] identifica el ambiente situado
+/// al otro lado y [connectionSide] registra el lado elegido por el usuario.
 class WallFeature {
   final String id;
   final FeatureType type;
   final ARPoint start;
   final ARPoint end;
+  final String? connectedRoomId;
+  final OpeningConnectionSide? connectionSide;
 
   WallFeature({
     required this.id,
     required this.type,
     required this.start,
     required this.end,
+    this.connectedRoomId,
+    this.connectionSide,
   });
+
+  bool get isConnected =>
+      connectedRoomId != null && connectedRoomId!.trim().isNotEmpty;
+
+  WallFeature copyWith({
+    String? id,
+    FeatureType? type,
+    ARPoint? start,
+    ARPoint? end,
+    String? connectedRoomId,
+    OpeningConnectionSide? connectionSide,
+  }) {
+    return WallFeature(
+      id: id ?? this.id,
+      type: type ?? this.type,
+      start: start ?? this.start,
+      end: end ?? this.end,
+      connectedRoomId: connectedRoomId ?? this.connectedRoomId,
+      connectionSide: connectionSide ?? this.connectionSide,
+    );
+  }
 
   Map<String, dynamic> toJson() {
     return {
@@ -125,28 +161,42 @@ class WallFeature {
       'type': type.name,
       'start': start.toJson(),
       'end': end.toJson(),
+      if (connectedRoomId != null)
+        'connectedRoomId': connectedRoomId,
+      if (connectionSide != null)
+        'connectionSide': connectionSide!.name,
     };
   }
 
   factory WallFeature.fromJson(
     Map<String, dynamic> json,
   ) {
+    final sideName = json['connectionSide'] as String?;
+
+    OpeningConnectionSide? side;
+
+    if (sideName != null) {
+      for (final candidate in OpeningConnectionSide.values) {
+        if (candidate.name == sideName) {
+          side = candidate;
+          break;
+        }
+      }
+    }
+
     return WallFeature(
       id: json['id'] as String,
-      type:
-          FeatureType.values.firstWhere(
-        (e) =>
-            e.name ==
-            json['type'],
+      type: FeatureType.values.firstWhere(
+        (e) => e.name == json['type'],
       ),
       start: ARPoint.fromJson(
-        json['start']
-            as Map<String, dynamic>,
+        json['start'] as Map<String, dynamic>,
       ),
       end: ARPoint.fromJson(
-        json['end']
-            as Map<String, dynamic>,
+        json['end'] as Map<String, dynamic>,
       ),
+      connectedRoomId: json['connectedRoomId'] as String?,
+      connectionSide: side,
     );
   }
 }
@@ -182,10 +232,8 @@ class RoomModel {
       name: name ?? this.name,
       type: type ?? this.type,
       points: points ?? this.points,
-      features:
-          features ?? this.features,
-      isClosed:
-          isClosed ?? this.isClosed,
+      features: features ?? this.features,
+      isClosed: isClosed ?? this.isClosed,
     );
   }
 
@@ -194,16 +242,8 @@ class RoomModel {
       'id': id,
       'name': name,
       'type': type.name,
-      'points': points
-          .map(
-            (p) => p.toJson(),
-          )
-          .toList(),
-      'features': features
-          .map(
-            (f) => f.toJson(),
-          )
-          .toList(),
+      'points': points.map((p) => p.toJson()).toList(),
+      'features': features.map((f) => f.toJson()).toList(),
       'isClosed': isClosed,
     };
   }
@@ -214,41 +254,27 @@ class RoomModel {
     return RoomModel(
       id: json['id'] as String,
       name: json['name'] as String,
-      type:
-          RoomType.values.firstWhere(
-        (e) =>
-            e.name ==
-            json['type'],
-        orElse: () =>
-            RoomType.living,
+      type: RoomType.values.firstWhere(
+        (e) => e.name == json['type'],
+        orElse: () => RoomType.living,
       ),
-      points:
-          (json['points'] as List)
+      points: (json['points'] as List)
+          .map(
+            (p) => ARPoint.fromJson(
+              p as Map<String, dynamic>,
+            ),
+          )
+          .toList(),
+      features: json['features'] != null
+          ? (json['features'] as List)
               .map(
-                (p) => ARPoint.fromJson(
-                  p as Map<
-                      String,
-                      dynamic>,
+                (f) => WallFeature.fromJson(
+                  f as Map<String, dynamic>,
                 ),
               )
-              .toList(),
-      features:
-          json['features'] != null
-              ? (json['features'] as List)
-                  .map(
-                    (f) =>
-                        WallFeature.fromJson(
-                      f as Map<
-                          String,
-                          dynamic>,
-                    ),
-                  )
-                  .toList()
-              : [],
-      isClosed:
-          json['isClosed']
-              as bool? ??
-          false,
+              .toList()
+          : [],
+      isClosed: json['isClosed'] as bool? ?? false,
     );
   }
 }
