@@ -62,6 +62,9 @@ class _BasicScannerScreenState
 
   String? _initializationError;
 
+  int get _protectedInitialPointCount =>
+      widget.continuationReference == null ? 0 : 2;
+
   @override
   void initState() {
     super.initState();
@@ -123,13 +126,14 @@ class _BasicScannerScreenState
         return;
       }
 
-      context
-          .read<ScannerProvider>()
-          .startNewRoom();
+      final scannerProvider =
+          context.read<ScannerProvider>();
 
-      context
-          .read<ScannerProvider>()
-          .updateTrackingStatus(true);
+      _startScannerRoom(
+        scannerProvider,
+      );
+
+      scannerProvider.updateTrackingStatus(true);
 
       setState(() {
         _cameraController =
@@ -153,6 +157,67 @@ class _BasicScannerScreenState
           .read<ScannerProvider>()
           .updateTrackingStatus(false);
     }
+  }
+
+  void _startScannerRoom(
+    ScannerProvider provider,
+  ) {
+    final continuation =
+        widget.continuationReference;
+
+    if (continuation == null) {
+      provider.startNewRoom();
+      return;
+    }
+
+    final width = continuation.width;
+    final tangentSign =
+        continuation.side == OpeningConnectionSide.left
+            ? 1.0
+            : -1.0;
+    final otherX = continuation.startEndpoint ==
+            ContinuationStartEndpoint.start
+        ? tangentSign * width
+        : -tangentSign * width;
+
+    final other = ARPoint(
+      x: otherX,
+      y: 0.0,
+      z: 0.0,
+    );
+    final origin = ARPoint(
+      x: 0.0,
+      y: 0.0,
+      z: 0.0,
+    );
+    final initialPoints = <ARPoint>[
+      other,
+      origin,
+    ];
+    final sharedFeature = WallFeature(
+      id: continuation.featureId,
+      type: continuation.featureType,
+      start: other,
+      end: origin,
+    );
+
+    provider.startNewRoom(
+      initialPoints: initialPoints,
+      initialFeatures: <WallFeature>[sharedFeature],
+    );
+
+    _scannerAdapter.seedPath(
+      initialPoints
+          .map(
+            (point) => ScannerPoint(
+              x: point.x,
+              y: point.y,
+              z: point.z,
+              source: PointSource.manual,
+            ),
+          )
+          .toList(),
+    );
   }
 
   @override
@@ -299,6 +364,9 @@ class _BasicScannerScreenState
   Widget build(BuildContext context) {
     final provider =
         context.watch<ScannerProvider>();
+    final completedRooms = context
+        .watch<FloorPlanProvider>()
+        .completedRooms;
 
     if (_initializing) {
       return const Scaffold(
@@ -341,9 +409,70 @@ class _BasicScannerScreenState
         children: [
           _buildCameraPreview(),
           _buildScannerOverlay(provider),
+          if (widget.continuationReference != null &&
+              completedRooms.isNotEmpty)
+            _buildContinuationPlanReference(
+              completedRooms,
+            ),
           _buildTopHud(provider),
           _buildBottomPanel(provider),
         ],
+      ),
+    );
+  }
+
+  Widget _buildContinuationPlanReference(
+    List<RoomModel> rooms,
+  ) {
+    final reference =
+        widget.continuationReference!;
+
+    return Positioned(
+      right: 12,
+      bottom: 300,
+      child: IgnorePointer(
+        child: Container(
+          width: 156,
+          height: 176,
+          padding: const EdgeInsets.fromLTRB(
+            8,
+            8,
+            8,
+            6,
+          ),
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(
+              alpha: 0.78,
+            ),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: const Color(0xFFFF8A00),
+              width: 1.5,
+            ),
+          ),
+          child: Column(
+            children: [
+              const Text(
+                'Plano anterior',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Expanded(
+                child: CustomPaint(
+                  size: Size.infinite,
+                  painter: _ContinuationPlanPainter(
+                    rooms: rooms,
+                    reference: reference,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -449,21 +578,23 @@ class _BasicScannerScreenState
   Widget _buildScannerOverlay(
     ScannerProvider provider,
   ) {
+    final room = provider.currentRoom;
     final points =
-        provider.currentRoom?.points ??
-            const <ARPoint>[];
+        room?.points ?? const <ARPoint>[];
+    final features =
+        room?.features ?? const <WallFeature>[];
 
     return IgnorePointer(
       child: CustomPaint(
         painter:
             _ScannerGuidePainter(
           points: points,
+          features: features,
         ),
         size: Size.infinite,
       ),
     );
   }
-
   Widget _buildTopHud(
     ScannerProvider provider,
   ) {
@@ -1032,7 +1163,6 @@ class _BasicScannerScreenState
       ),
     );
   }
-
   Widget _buildModeSelector() {
     final l10n =
         AppLocalizations.of(context)!;
@@ -1217,7 +1347,8 @@ class _BasicScannerScreenState
     ScannerProvider provider,
   ) {
     final enabled =
-        provider.currentPointsCount > 0;
+        provider.currentPointsCount >
+            _protectedInitialPointCount;
 
     return SizedBox(
       width: 48,
@@ -1606,8 +1737,7 @@ class _BasicScannerScreenState
         });
       }
     }
-  }
-  Future<_BasicMeasurement?>
+  }  Future<_BasicMeasurement?>
       _showMeasurementDialog({
     required int nextCorner,
     bool featureMode = false,
@@ -2159,8 +2289,7 @@ class _BasicScannerScreenState
     return double.tryParse(
       normalized,
     );
-  }
-  void _showValidationError(
+  }  void _showValidationError(
     String message,
   ) {
     if (!mounted) {
@@ -2311,6 +2440,134 @@ class _BasicScannerScreenState
   }
 }
 
+class _ContinuationPlanPainter extends CustomPainter {
+  final List<RoomModel> rooms;
+  final ScanContinuationReference reference;
+
+  const _ContinuationPlanPainter({
+    required this.rooms,
+    required this.reference,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final points = <ARPoint>[
+      for (final room in rooms) ...room.points,
+    ];
+
+    if (points.isEmpty) {
+      return;
+    }
+
+    double minX = points.first.x;
+    double maxX = points.first.x;
+    double minZ = points.first.z;
+    double maxZ = points.first.z;
+
+    for (final point in points.skip(1)) {
+      minX = point.x < minX ? point.x : minX;
+      maxX = point.x > maxX ? point.x : maxX;
+      minZ = point.z < minZ ? point.z : minZ;
+      maxZ = point.z > maxZ ? point.z : maxZ;
+    }
+
+    final width = (maxX - minX).abs();
+    final height = (maxZ - minZ).abs();
+    final safeWidth = width <= 0.000001 ? 1.0 : width;
+    final safeHeight = height <= 0.000001 ? 1.0 : height;
+    final scaleX = (size.width - 16) / safeWidth;
+    final scaleY = (size.height - 16) / safeHeight;
+    final scale = scaleX < scaleY ? scaleX : scaleY;
+    final drawingWidth = width * scale;
+    final drawingHeight = height * scale;
+    final offsetX = (size.width - drawingWidth) / 2.0;
+    final offsetY = (size.height - drawingHeight) / 2.0;
+
+    Offset project(ARPoint point) {
+      return Offset(
+        offsetX + (point.x - minX) * scale,
+        offsetY + (point.z - minZ) * scale,
+      );
+    }
+
+    final wallPaint = Paint()
+      ..color = const Color(0xFF448AFF)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2
+      ..strokeJoin = StrokeJoin.round;
+
+    for (final room in rooms) {
+      if (room.points.length < 2) {
+        continue;
+      }
+
+      final path = Path();
+      final first = project(room.points.first);
+      path.moveTo(first.dx, first.dy);
+
+      for (final point in room.points.skip(1)) {
+        final projected = project(point);
+        path.lineTo(projected.dx, projected.dy);
+      }
+
+      if (room.isClosed || room.points.length >= 3) {
+        path.close();
+      }
+
+      canvas.drawPath(path, wallPaint);
+
+      for (final feature in room.features) {
+        final selected = room.id == reference.sourceRoomId &&
+            feature.id == reference.featureId;
+        final featurePaint = Paint()
+          ..color = selected
+              ? const Color(0xFF00C853)
+              : feature.type == FeatureType.door
+                  ? const Color(0xFFFF8A00)
+                  : const Color(0xFFD500F9)
+          ..strokeWidth = selected ? 7 : 4
+          ..strokeCap = StrokeCap.round;
+
+        canvas.drawLine(
+          project(feature.start),
+          project(feature.end),
+          featurePaint,
+        );
+      }
+    }
+
+    _drawContinuationPoint(
+      canvas,
+      project(reference.origin),
+    );
+  }
+
+  void _drawContinuationPoint(
+    Canvas canvas,
+    Offset point,
+  ) {
+    canvas.drawCircle(
+      point,
+      7,
+      Paint()..color = const Color(0xFF00C853),
+    );
+
+    canvas.drawCircle(
+      point,
+      3,
+      Paint()..color = Colors.white,
+    );
+  }
+
+  @override
+  bool shouldRepaint(
+    covariant _ContinuationPlanPainter oldDelegate,
+  ) {
+    return oldDelegate.rooms != rooms ||
+        oldDelegate.reference != reference;
+  }
+}
+
 class _BasicMeasurement {
   final double distance;
   final double angle;
@@ -2326,9 +2583,11 @@ class _BasicMeasurement {
 class _ScannerGuidePainter
     extends CustomPainter {
   final List<ARPoint> points;
+  final List<WallFeature> features;
 
   const _ScannerGuidePainter({
     required this.points,
+    required this.features,
   });
 
   @override
@@ -2366,6 +2625,13 @@ class _ScannerGuidePainter
       );
     }).toList();
 
+    Offset projectPoint(ARPoint point) {
+      return Offset(
+        center.dx + point.x * scale,
+        center.dy - point.z * scale,
+      );
+    }
+
     final linePaint =
         Paint()
           ..style =
@@ -2381,6 +2647,22 @@ class _ScannerGuidePainter
         projected[i],
         projected[i + 1],
         linePaint,
+      );
+    }
+
+    for (final feature in features) {
+      final featurePaint = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 8
+        ..strokeCap = StrokeCap.round
+        ..color = feature.type == FeatureType.door
+            ? const Color(0xFFFF8A00)
+            : const Color(0xFFD500F9);
+
+      canvas.drawLine(
+        projectPoint(feature.start),
+        projectPoint(feature.end),
+        featurePaint,
       );
     }
 
@@ -2564,6 +2846,7 @@ class _ScannerGuidePainter
     covariant _ScannerGuidePainter oldDelegate,
   ) {
     return oldDelegate.points !=
-        points;
+            points ||
+        oldDelegate.features != features;
   }
 }
