@@ -307,15 +307,20 @@ class _FloorPlanViewerScreenState
       return;
     }
 
-    final side = await _chooseConnectionSide();
+    final side = await _chooseConnectionSide(feature);
 
     if (!mounted || side == null) return;
+
+    final startEndpoint = await _chooseStartEndpoint();
+
+    if (!mounted || startEndpoint == null) return;
 
     final provider = context.read<FloorPlanProvider>();
     final reference = provider.createContinuationReference(
       roomId: selection.roomId,
       featureId: feature.id,
       side: side,
+      startEndpoint: startEndpoint,
     );
 
     final projectUuid = provider.projectUuid;
@@ -336,7 +341,18 @@ class _FloorPlanViewerScreenState
     );
   }
 
-  Future<OpeningConnectionSide?> _chooseConnectionSide() {
+  Future<OpeningConnectionSide?> _chooseConnectionSide(
+    WallFeature feature,
+  ) {
+    final start = _transformPoint(feature.start);
+    final end = _transformPoint(feature.end);
+    final openingDirection = end - start;
+    final leftDirection = Offset(
+      -openingDirection.dy,
+      openingDirection.dx,
+    );
+    final rightDirection = -leftDirection;
+
     return showDialog<OpeningConnectionSide>(
       context: context,
       builder: (dialogContext) {
@@ -350,11 +366,13 @@ class _FloorPlanViewerScreenState
                 'que apunta al ambiente que vas a escanear.',
               ),
               const SizedBox(height: 16),
-              const SizedBox(
+              SizedBox(
                 width: 240,
                 height: 120,
                 child: CustomPaint(
-                  painter: _OpeningDirectionPainter(),
+                  painter: _OpeningDirectionPainter(
+                    openingDirection: openingDirection,
+                  ),
                 ),
               ),
               const SizedBox(height: 12),
@@ -365,8 +383,10 @@ class _FloorPlanViewerScreenState
                     dialogContext,
                     OpeningConnectionSide.left,
                   ),
-                  icon: const Icon(Icons.arrow_upward),
-                  label: const Text('Elegir flecha superior'),
+                  icon: Icon(_directionIcon(leftDirection)),
+                  label: Text(
+                    'Continuar hacia ${_directionLabel(leftDirection)}',
+                  ),
                 ),
               ),
               const SizedBox(height: 8),
@@ -377,8 +397,10 @@ class _FloorPlanViewerScreenState
                     dialogContext,
                     OpeningConnectionSide.right,
                   ),
-                  icon: const Icon(Icons.arrow_downward),
-                  label: const Text('Elegir flecha inferior'),
+                  icon: Icon(_directionIcon(rightDirection)),
+                  label: Text(
+                    'Continuar hacia ${_directionLabel(rightDirection)}',
+                  ),
                 ),
               ),
             ],
@@ -392,6 +414,61 @@ class _FloorPlanViewerScreenState
         );
       },
     );
+  }
+
+  Future<ContinuationStartEndpoint?> _chooseStartEndpoint() {
+    return showDialog<ContinuationStartEndpoint>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('¿Desde qué extremo comenzás?'),
+          content: const Text(
+            'Elegí el extremo de la abertura donde vas a marcar la primera '
+            'esquina. El plano continuará desde ese punto, no desde el centro.',
+          ),
+          actions: [
+            OutlinedButton(
+              onPressed: () => Navigator.pop(
+                dialogContext,
+                ContinuationStartEndpoint.start,
+              ),
+              child: const Text('Comenzar desde A'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(
+                dialogContext,
+                ContinuationStartEndpoint.end,
+              ),
+              child: const Text('Comenzar desde B'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancelar'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  String _directionLabel(Offset direction) {
+    if (direction.dx.abs() >= direction.dy.abs()) {
+      return direction.dx >= 0 ? 'la derecha' : 'la izquierda';
+    }
+
+    return direction.dy >= 0 ? 'abajo' : 'arriba';
+  }
+
+  IconData _directionIcon(Offset direction) {
+    if (direction.dx.abs() >= direction.dy.abs()) {
+      return direction.dx >= 0
+          ? Icons.arrow_forward
+          : Icons.arrow_back;
+    }
+
+    return direction.dy >= 0
+        ? Icons.arrow_downward
+        : Icons.arrow_upward;
   }
 
   double _featureWidth(WallFeature feature) {
@@ -511,7 +588,6 @@ class _FloorPlanViewerScreenState
       'Ambientes organizados correctamente.',
     );
   }
-
   // ===========================================================================
   // BUILD
   // ===========================================================================
@@ -837,7 +913,6 @@ class _FloorPlanViewerScreenState
       provider.projectName,
     );
   }
-
   // ===========================================================================
   // PUERTAS / VENTANAS
   // ===========================================================================
@@ -1354,7 +1429,6 @@ class _FloorPlanViewerScreenState
       );
   }
 }
-
 // =============================================================================
 // ACCIONES
 // =============================================================================
@@ -1392,14 +1466,27 @@ class _FeatureSelection {
 }
 
 class _OpeningDirectionPainter extends CustomPainter {
-  const _OpeningDirectionPainter();
+  final Offset openingDirection;
+
+  const _OpeningDirectionPainter({
+    required this.openingDirection,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
-    final centerY = size.height / 2.0;
-    final start = Offset(38, centerY);
-    final end = Offset(size.width - 38, centerY);
-    final midpoint = Offset(size.width / 2.0, centerY);
+    final midpoint = Offset(
+      size.width / 2.0,
+      size.height / 2.0,
+    );
+    final length = openingDirection.distance;
+    final tangent = length <= 0.000001
+        ? const Offset(1, 0)
+        : openingDirection / length;
+    final normal = Offset(-tangent.dy, tangent.dx);
+    final halfOpening = size.shortestSide * 0.42;
+    final arrowLength = size.shortestSide * 0.35;
+    final start = midpoint - tangent * halfOpening;
+    final end = midpoint + tangent * halfOpening;
 
     final openingPaint = Paint()
       ..color = const Color(0xFFFF8A00)
@@ -1414,17 +1501,17 @@ class _OpeningDirectionPainter extends CustomPainter {
     _drawArrow(
       canvas,
       midpoint,
-      midpoint.translate(0, -42),
+      midpoint + normal * arrowLength,
       arrowPaint,
     );
     _drawArrow(
       canvas,
       midpoint,
-      midpoint.translate(0, 42),
+      midpoint - normal * arrowLength,
       arrowPaint,
     );
-    _drawLabel(canvas, 'A', start.translate(-18, -10));
-    _drawLabel(canvas, 'B', end.translate(8, -10));
+    _drawLabel(canvas, 'A', start - normal * 18);
+    _drawLabel(canvas, 'B', end - normal * 18);
   }
 
   void _drawArrow(
@@ -1434,15 +1521,23 @@ class _OpeningDirectionPainter extends CustomPainter {
     Paint paint,
   ) {
     canvas.drawLine(start, end, paint);
-    final direction = end.dy < start.dy ? -1.0 : 1.0;
+    final delta = end - start;
+    final length = delta.distance;
+
+    if (length <= 0.000001) {
+      return;
+    }
+
+    final direction = delta / length;
+    final perpendicular = Offset(-direction.dy, direction.dx);
     canvas.drawLine(
       end,
-      end.translate(-8, -10 * direction),
+      end - direction * 10 + perpendicular * 8,
       paint,
     );
     canvas.drawLine(
       end,
-      end.translate(8, -10 * direction),
+      end - direction * 10 - perpendicular * 8,
       paint,
     );
   }
@@ -1520,8 +1615,7 @@ class _EmptyPlanView extends StatelessWidget {
 }
 
 // =============================================================================
-// PAINTER
-// =============================================================================
+// PAINTER// =============================================================================
 class FloorPlanPainter
     extends CustomPainter {
   final List<RoomModel> rooms;
