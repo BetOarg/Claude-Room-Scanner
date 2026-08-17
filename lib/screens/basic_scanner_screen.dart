@@ -23,11 +23,13 @@ enum BasicAppMode {
 class BasicScannerScreen extends StatefulWidget {
   final String projectUuid;
   final String projectName;
+  final ScanContinuationReference? continuationReference;
 
   const BasicScannerScreen({
     super.key,
     required this.projectUuid,
     required this.projectName,
+    this.continuationReference,
   });
 
   @override
@@ -796,7 +798,6 @@ class _BasicScannerScreenState
       name,
     );
   }
-
   Future<void> _showRoomTypeSelector(
     ScannerProvider provider,
   ) async {
@@ -1565,7 +1566,6 @@ class _BasicScannerScreenState
       }
     }
   }
-
   Future<_BasicMeasurement?>
       _showMeasurementDialog({
     required int nextCorner,
