@@ -224,6 +224,159 @@ class FloorPlanProvider extends ChangeNotifier {
     await _persist();
   }
 
+  /// Guarda un ambiente escaneado desde una puerta o ventana existente.
+  ///
+  /// El contorno recibido utiliza coordenadas locales del scanner:
+  ///
+  /// - el origen local se alinea con el punto medio de la abertura;
+  /// - +Z apunta hacia el lado elegido para el nuevo ambiente;
+  /// - +X conserva la dirección de 90° hacia la derecha.
+  ///
+  /// La operación actualiza los dos ambientes antes de notificar o persistir,
+  /// evitando estados intermedios con una conexión incompleta.
+  Future<bool> addCompletedRoomFromContinuation({
+    required RoomModel room,
+    required ScanContinuationReference reference,
+  }) async {
+    final sourceRoomIndex = _completedRooms.indexWhere(
+      (existing) => existing.id == reference.sourceRoomId,
+    );
+
+    if (sourceRoomIndex == -1) {
+      return false;
+    }
+
+    final sourceRoom = _completedRooms[sourceRoomIndex];
+    final sourceFeatureIndex = sourceRoom.features.indexWhere(
+      (feature) => feature.id == reference.featureId,
+    );
+
+    if (sourceFeatureIndex == -1 ||
+        sourceRoom.features[sourceFeatureIndex].isConnected) {
+      return false;
+    }
+
+    var roomToAdd = room;
+
+    if (roomToAdd.id.trim().isEmpty ||
+        _completedRooms.any(
+          (existing) => existing.id == roomToAdd.id,
+        )) {
+      roomToAdd = roomToAdd.copyWith(
+        id: _nextUniqueId(),
+      );
+    }
+
+    roomToAdd = _alignRoomToContinuation(
+      roomToAdd,
+      reference,
+    );
+
+    final sourceFeatures = List<WallFeature>.from(
+      sourceRoom.features,
+    );
+    final sourceFeature = sourceFeatures[sourceFeatureIndex];
+
+    sourceFeatures[sourceFeatureIndex] = sourceFeature.copyWith(
+      connectedRoomId: roomToAdd.id,
+      connectionSide: reference.side,
+    );
+
+    final oppositeSide =
+        reference.side == OpeningConnectionSide.left
+            ? OpeningConnectionSide.right
+            : OpeningConnectionSide.left;
+
+    final sharedFeature = WallFeature(
+      id: sourceFeature.id,
+      type: sourceFeature.type,
+      start: sourceFeature.start,
+      end: sourceFeature.end,
+      connectedRoomId: sourceRoom.id,
+      connectionSide: oppositeSide,
+    );
+
+    final newFeatures = List<WallFeature>.from(
+      roomToAdd.features,
+    );
+    final existingSharedIndex = newFeatures.indexWhere(
+      (feature) => feature.id == sharedFeature.id,
+    );
+
+    if (existingSharedIndex == -1) {
+      newFeatures.add(sharedFeature);
+    } else {
+      newFeatures[existingSharedIndex] = sharedFeature;
+    }
+
+    roomToAdd = roomToAdd.copyWith(
+      features: newFeatures,
+    );
+
+    _completedRooms[sourceRoomIndex] = sourceRoom.copyWith(
+      features: sourceFeatures,
+    );
+    _completedRooms.add(roomToAdd);
+
+    notifyListeners();
+    await _persist();
+
+    return true;
+  }
+
+  RoomModel _alignRoomToContinuation(
+    RoomModel room,
+    ScanContinuationReference reference,
+  ) {
+    final openingDx =
+        reference.globalEnd.x - reference.globalStart.x;
+    final openingDz =
+        reference.globalEnd.z - reference.globalStart.z;
+    final openingLength = math.sqrt(
+      openingDx * openingDx + openingDz * openingDz,
+    );
+
+    if (openingLength <= 0.000001) {
+      return room;
+    }
+
+    final tangentX = openingDx / openingLength;
+    final tangentZ = openingDz / openingLength;
+
+    final forwardX =
+        reference.side == OpeningConnectionSide.left
+            ? -tangentZ
+            : tangentZ;
+    final forwardZ =
+        reference.side == OpeningConnectionSide.left
+            ? tangentX
+            : -tangentX;
+
+    final rightX = forwardZ;
+    final rightZ = -forwardX;
+    final origin = reference.midpoint;
+
+    ARPoint transformPoint(ARPoint point) {
+      return ARPoint(
+        x: origin.x + point.x * rightX + point.z * forwardX,
+        y: origin.y + point.y,
+        z: origin.z + point.x * rightZ + point.z * forwardZ,
+      );
+    }
+
+    return room.copyWith(
+      points: room.points.map(transformPoint).toList(),
+      features: room.features
+          .map(
+            (feature) => feature.copyWith(
+              start: transformPoint(feature.start),
+              end: transformPoint(feature.end),
+            ),
+          )
+          .toList(),
+    );
+  }
+
   Future<void> loadExistingRooms(
     List<RoomModel> rooms,
     String projectName,
@@ -291,8 +444,7 @@ class FloorPlanProvider extends ChangeNotifier {
     await _persist();
   }
 
-  // ===========================================================================
-  // POSICIONAMIENTO GLOBAL
+  // ===========================================================================  // POSICIONAMIENTO GLOBAL
   // ===========================================================================
 
   /// Traslada una habitación completa.
@@ -755,7 +907,6 @@ class FloorPlanProvider extends ChangeNotifier {
         )
         .toList();
   }
-
   // ===========================================================================
   // REAJUSTE DE ABERTURAS
   // ===========================================================================
@@ -967,9 +1118,7 @@ class FloorPlanProvider extends ChangeNotifier {
       }
 
       remapped.add(
-        WallFeature(
-          id: feature.id,
-          type: feature.type,
+        feature.copyWith(
           start:
               pointAt(startT),
           end:
