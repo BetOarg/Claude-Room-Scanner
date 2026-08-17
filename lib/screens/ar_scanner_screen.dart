@@ -344,8 +344,7 @@ class _ARScannerScreenState extends State<ARScannerScreen>
                         Icons.circle,
                         size: 10,
                         color: provider.isTrackingOk
-                            ? Colors.greenAccent
-                            : Colors.orangeAccent,                      ),
+                            ? Colors.greenAccent                            : Colors.orangeAccent,                      ),
                       label: Text(
                         provider.isTrackingOk
                             ? 'AR Activo'
@@ -630,7 +629,7 @@ class _ARScannerScreenState extends State<ARScannerScreen>
         dialogContext,
       ) {
         return AlertDialog(
-          title: const Text(
+          title: Text(
             l10n.roomName,
           ),
           content: TextField(
@@ -640,7 +639,7 @@ class _ARScannerScreenState extends State<ARScannerScreen>
                 TextCapitalization.sentences,
             maxLength: 60,
             decoration:
-                const InputDecoration(
+                InputDecoration(
               labelText:
                   l10n.roomDestination,
               hintText:
@@ -666,7 +665,7 @@ class _ARScannerScreenState extends State<ARScannerScreen>
                   Navigator.pop(
                 dialogContext,
               ),
-              child: const Text(
+              child: Text(
                 l10n.cancel,
               ),
             ),
@@ -684,15 +683,14 @@ class _ARScannerScreenState extends State<ARScannerScreen>
                   normalized,
                 );
               },
-              child: const Text(
+              child: Text(
                 l10n.save,
               ),
             ),
           ],
         );
       },
-    );
-    await Future<void>.delayed(
+    );    await Future<void>.delayed(
       kThemeAnimationDuration,
     );
 
