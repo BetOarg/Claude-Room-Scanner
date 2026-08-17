@@ -22,5 +22,18 @@
   "roomTypeBalcony": "Balcony",
   "roomTypeTerrace": "Terrace",
   "roomTypeGarage": "Garage",
-  "roomTypePlayroom": "Playroom"
+  "roomTypePlayroom": "Playroom",
+  "roomType": "Room type",
+  "viewPlan": "View floor plan",
+  "editRoomName": "Edit room name",
+  "roomNameExample": "Example: Ana's bedroom",
+  "calculating": "CALCULATING...",
+  "markStart": "MARK START",
+  "measureNextCorner": "MEASURE NEXT CORNER",
+  "placeDoor": "PLACE DOOR",
+  "placeWindow": "PLACE WINDOW",
+  "addCorner": "ADD CORNER",
+  "markSecondEnd": "MARK SECOND END",
+  "measureDoor": "MEASURE DOOR",
+  "measureWindow": "MEASURE WINDOW"
 }
