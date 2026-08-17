@@ -55,6 +55,17 @@ class _ARScannerScreenState extends State<ARScannerScreen>
   ARPoint? _pendingFeatureStart;
   AppMode? _pendingFeatureMode;
 
+  vector.Vector3? _continuationSessionStart;
+  vector.Vector3? _continuationSessionEnd;
+
+  bool get _requiresContinuationCalibration =>
+      widget.continuationReference != null;
+
+  bool get _isContinuationCalibrated =>
+      !_requiresContinuationCalibration ||
+      (_continuationSessionStart != null &&
+          _continuationSessionEnd != null);
+
   // ================================================================
   // CONTROLADORES AR
   // ================================================================
@@ -135,6 +146,11 @@ class _ARScannerScreenState extends State<ARScannerScreen>
 
       _pendingFeatureStart = null;
       _pendingFeatureMode = null;
+
+      if (_requiresContinuationCalibration) {
+        _continuationSessionStart = null;
+        _continuationSessionEnd = null;
+      }
 
       if (mounted) {
         context
@@ -397,6 +413,45 @@ class _ARScannerScreenState extends State<ARScannerScreen>
               ),
             ),
 
+          if (_requiresContinuationCalibration)
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 112,
+              left: 16,
+              right: 16,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 11,
+                ),
+                decoration: BoxDecoration(
+                  color: _isContinuationCalibrated
+                      ? Colors.green.withValues(alpha: 0.88)
+                      : const Color(0xFFFF8A00).withValues(alpha: 0.92),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      _isContinuationCalibrated
+                          ? Icons.check_circle_outline
+                          : Icons.center_focus_strong,
+                      color: Colors.white,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        _continuationInstruction(),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
           // ============================================================
           // CAPA 5: CONTROLES INFERIORES
           // ============================================================
@@ -528,7 +583,11 @@ class _ARScannerScreenState extends State<ARScannerScreen>
                                   : Icons.window,
                         ),
                         label: Text(
-                          _currentMode ==
+                          !_isContinuationCalibrated
+                              ? _continuationSessionStart == null
+                                  ? 'Marcar extremo A'
+                                  : 'Marcar extremo B'
+                              : _currentMode ==
                                   AppMode.wall
                               ? l10n.addCorner
                               : _pendingFeatureStart !=
@@ -615,7 +674,6 @@ class _ARScannerScreenState extends State<ARScannerScreen>
         ? room.type.localizedName(l10n)
         : room.name;
   }
-
   Future<void> _showCustomRoomNameDialog(
     ScannerProvider provider,
   ) async {
@@ -712,6 +770,113 @@ class _ARScannerScreenState extends State<ARScannerScreen>
       name,
     );
   }
+
+  String _continuationInstruction() {
+    if (_continuationSessionStart == null) {
+      return 'Apuntá al extremo A de la abertura y marcá la referencia.';
+    }
+
+    if (_continuationSessionEnd == null) {
+      return 'Ahora apuntá al extremo B de la misma abertura.';
+    }
+
+    return 'Referencia alineada. Ya podés medir el ambiente nuevo.';
+  }
+
+  Future<void> _captureContinuationEndpoint() async {
+    final position = await _getCurrentCameraPosition();
+
+    if (!mounted) return;
+
+    if (position == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'No se detectó un punto válido. Apuntá a la abertura e intentá nuevamente.',
+          ),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    if (_continuationSessionStart == null) {
+      setState(() {
+        _continuationSessionStart = position;
+      });
+      return;
+    }
+
+    final start = _continuationSessionStart!;
+    final dx = position.x - start.x;
+    final dz = position.z - start.z;
+    final measuredWidth = vector.Vector2(dx, dz).length;
+
+    if (measuredWidth < 0.20) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Los extremos están demasiado cerca. Volvé a marcar el extremo B.',
+          ),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _continuationSessionEnd = position;
+    });
+
+    final expectedWidth = widget.continuationReference!.width;
+    final difference = (measuredWidth - expectedWidth).abs();
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          difference > 0.15
+              ? 'Referencia alineada. Atención: la medida AR difiere ${difference.toStringAsFixed(2)} m del plano.'
+              : 'Referencia alineada correctamente.',
+        ),
+        backgroundColor:
+            difference > 0.15 ? Colors.orange : Colors.green,
+      ),
+    );
+  }
+
+  vector.Vector3 _toContinuationLocal(
+    vector.Vector3 sessionPoint,
+  ) {
+    if (!_requiresContinuationCalibration ||
+        !_isContinuationCalibrated) {
+      return sessionPoint;
+    }
+
+    final reference = widget.continuationReference!;
+    final start = _continuationSessionStart!;
+    final end = _continuationSessionEnd!;
+    final midpoint = (start + end) / 2.0;
+    final tangent = vector.Vector2(
+      end.x - start.x,
+      end.z - start.z,
+    )..normalize();
+
+    final forward = reference.side == OpeningConnectionSide.left
+        ? vector.Vector2(-tangent.y, tangent.x)
+        : vector.Vector2(tangent.y, -tangent.x);
+    final right = vector.Vector2(forward.y, -forward.x);
+    final relative = vector.Vector2(
+      sessionPoint.x - midpoint.x,
+      sessionPoint.z - midpoint.z,
+    );
+
+    return vector.Vector3(
+      relative.dot(right),
+      sessionPoint.y - midpoint.y,
+      relative.dot(forward),
+    );
+  }
+
   // ================================================================
   // SELECTOR DE MODO
   // ================================================================
@@ -787,6 +952,11 @@ class _ARScannerScreenState extends State<ARScannerScreen>
   ) async {
     HapticFeedback.lightImpact();
 
+    if (!_isContinuationCalibrated) {
+      await _captureContinuationEndpoint();
+      return;
+    }
+
     final pos =
         await _getCurrentCameraPosition();
 
@@ -806,9 +976,12 @@ class _ARScannerScreenState extends State<ARScannerScreen>
       return;
     }
 
+    final resolvedPosition =
+        _toContinuationLocal(pos);
+
     switch (_currentMode) {
       case AppMode.wall:
-        _handleWallPoint(provider, pos);
+        _handleWallPoint(provider, resolvedPosition);
         break;
 
       case AppMode.door:
@@ -816,7 +989,7 @@ class _ARScannerScreenState extends State<ARScannerScreen>
         _handleFeatureInsertion(
           provider,
           _currentMode,
-          pos,
+          resolvedPosition,
         );
         break;
     }
@@ -985,6 +1158,30 @@ class _ARScannerScreenState extends State<ARScannerScreen>
   ) async {
     HapticFeedback.mediumImpact();
 
+    final continuation = widget.continuationReference;
+    final floorPlanProvider = context.read<FloorPlanProvider>();
+
+    if (continuation != null) {
+      final sourceFeature = floorPlanProvider.findFeature(
+        roomId: continuation.sourceRoomId,
+        featureId: continuation.featureId,
+      );
+
+      if (sourceFeature == null || sourceFeature.isConnected) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              sourceFeature == null
+                  ? 'La abertura de referencia ya no existe.'
+                  : 'La abertura ya conecta otro ambiente.',
+            ),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+        return;
+      }
+    }
+
     final closedRoom =
         provider.closeCurrentRoom();
 
@@ -1006,19 +1203,39 @@ class _ARScannerScreenState extends State<ARScannerScreen>
       return;
     }
 
-    // Persistir inmediatamente.
-    await context
-        .read<FloorPlanProvider>()
-        .addCompletedRoom(
-          closedRoom,
-        );
+    final saved = continuation == null
+        ? true
+        : await floorPlanProvider.addCompletedRoomFromContinuation(
+            room: closedRoom,
+            reference: continuation,
+          );
+
+    if (continuation == null) {
+      await floorPlanProvider.addCompletedRoom(closedRoom);
+    }
+
+    if (!saved) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'No se pudo conectar el ambiente con la abertura seleccionada.',
+          ),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
 
     if (!mounted) return;
 
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
+      SnackBar(
         content: Text(
-          '¡Ambiente guardado correctamente!',
+          continuation == null
+              ? '¡Ambiente guardado correctamente!'
+              : '¡Ambiente conectado y alineado correctamente!',
         ),
         backgroundColor: Colors.green,
       ),
