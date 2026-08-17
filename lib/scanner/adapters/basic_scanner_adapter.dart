@@ -145,6 +145,35 @@ class BasicScannerAdapter implements ScannerAdapter {
     _pendingAngleDegrees = null;
   }
 
+  /// Carga un tramo inicial ya conocido sin solicitar una nueva medición.
+  ///
+  /// Se utiliza al continuar desde una abertura: el historial contiene el
+  /// extremo opuesto y, al final, el extremo A o B elegido por el usuario.
+  void seedPath(
+    List<ScannerPoint> points,
+  ) {
+    if (!_initialized) {
+      return;
+    }
+
+    _history
+      ..clear()
+      ..addAll(points);
+
+    _pendingDistance = null;
+    _pendingAngleDegrees = null;
+
+    if (_history.isEmpty) {
+      _currentX = 0.0;
+      _currentZ = 0.0;
+      return;
+    }
+
+    final last = _history.last;
+    _currentX = last.x;
+    _currentZ = last.z;
+  }
+
   /// Captura y confirma directamente un punto.
   ///
   /// Se conserva para compatibilidad con ScannerAdapter.
