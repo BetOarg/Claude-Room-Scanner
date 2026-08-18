@@ -15,9 +15,9 @@ import '../models/scanner_point.dart';
 ///
 /// Convención:
 ///
-///   0°   = +Z
+///   0°   = -Z
 ///   90°  = +X
-///   180° = -Z
+///   180° = +Z
 ///   270° = -X
 ///
 /// El adapter utiliza un modelo transaccional:
@@ -116,8 +116,10 @@ class BasicScannerAdapter implements ScannerAdapter {
     final deltaX =
         math.sin(angleRadians) * distance;
 
+    // En pantalla, Z positivo se dibuja hacia abajo. Se invierte el coseno
+    // para que 0° corresponda visualmente a arriba y 180° a abajo.
     final deltaZ =
-        math.cos(angleRadians) * distance;
+        -math.cos(angleRadians) * distance;
 
     return ScannerPoint(
       x: _currentX + deltaX,
