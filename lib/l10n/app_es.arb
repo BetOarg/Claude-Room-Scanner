@@ -53,5 +53,38 @@
       }
     }
   },
-  "continueMeasuring": "Continuar midiendo"
+  "continueMeasuring": "Continuar midiendo",
+  "cameraResumeFailed": "No se pudo reanudar la cámara: {error}",
+  "@cameraResumeFailed": {
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  "continuationFromOpening": "Continuación desde una abertura",
+  "continuationFirstCornerInstruction": "Desde el punto verde, medí la distancia hasta la primera esquina real del ambiente.",
+  "markRoomStartingPoint": "Marcá el punto inicial de la habitación.",
+  "measureNextCornerInstruction": "Medí la distancia hasta la próxima esquina y elegí su dirección.",
+  "traceStarted": "Inicio del trazado",
+  "cornerRegistered": "Esquina {count} registrada",
+  "@cornerRegistered": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "needThreeCornersToClose": "Necesitás al menos 3 esquinas para cerrar.",
+  "canContinueOrClose": "Podés seguir agregando esquinas o cerrar.",
+  "lastCornerRemoved": "Última esquina eliminada.",
+  "measureFirstCorner": "Medir primera esquina",
+  "measureFirstCornerBeforeFeatures": "Primero medí la primera esquina real del ambiente.",
+  "couldNotAddStart": "No se pudo agregar el inicio.",
+  "startMarked": "Inicio marcado. Ahora medí la primera pared.",
+  "couldNotCalculateCorner": "No se pudo calcular la nueva esquina.",
+  "invalidCorner": "La esquina no es válida.",
+  "firstCornerRegistered": "Primera esquina registrada. Continuá midiendo las paredes del ambiente.",
+  "measurementRegistrationFailed": "No se pudo registrar la medición: {error}",
+  "@measurementRegistrationFailed": {
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  }
 }
