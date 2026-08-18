@@ -298,6 +298,8 @@ class FloorPlanProvider extends ChangeNotifier {
       end: sourceFeature.end,
       connectedRoomId: sourceRoom.id,
       connectionSide: oppositeSide,
+      doorHingeSide: sourceFeature.doorHingeSide,
+      doorSwingSide: sourceFeature.doorSwingSide,
     );
 
     final newFeatures = List<WallFeature>.from(
@@ -595,8 +597,7 @@ class FloorPlanProvider extends ChangeNotifier {
   }
 
   /// Organiza todas las habitaciones del proyecto en una fila.
-  ///
-  /// Esta función corrige proyectos históricos en los que cada habitación
+  ///  /// Esta función corrige proyectos históricos en los que cada habitación
   /// fue escaneada comenzando en (0, 0, 0), produciendo superposición visual.
   ///
   /// La primera habitación comienza en X = 0 y las siguientes se colocan
@@ -751,6 +752,50 @@ class FloorPlanProvider extends ChangeNotifier {
     }
 
     return null;
+  }
+
+  /// Actualiza la representación de una puerta en todos los ambientes que
+  /// comparten su identificador y la persiste como una única abertura.
+  Future<bool> updateDoorOrientation({
+    required String featureId,
+    DoorHingeSide? hingeSide,
+    DoorSwingSide? swingSide,
+  }) async {
+    var changed = false;
+
+    for (var roomIndex = 0;
+        roomIndex < _completedRooms.length;
+        roomIndex++) {
+      final room = _completedRooms[roomIndex];
+      final featureIndex = room.features.indexWhere(
+        (feature) =>
+            feature.id == featureId &&
+            feature.type == FeatureType.door,
+      );
+
+      if (featureIndex == -1) {
+        continue;
+      }
+
+      final features = List<WallFeature>.from(room.features);
+      final feature = features[featureIndex];
+      features[featureIndex] = feature.copyWith(
+        doorHingeSide: hingeSide,
+        doorSwingSide: swingSide,
+      );
+      _completedRooms[roomIndex] = room.copyWith(
+        features: features,
+      );
+      changed = true;
+    }
+
+    if (!changed) {
+      return false;
+    }
+
+    notifyListeners();
+    await _persist();
+    return true;
   }
 
   /// Construye la referencia común que utilizarán el plano 2D, Basic Scanner,
@@ -1151,8 +1196,7 @@ class FloorPlanProvider extends ChangeNotifier {
   // EDITOR DE MEDIDAS
   // ===========================================================================
 
-  Future<ValidationResult>
-      updateWallLength({
+  Future<ValidationResult>      updateWallLength({
     required String roomId,
     int? roomIndex,
     required int wallIndex,
