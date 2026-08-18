@@ -497,8 +497,7 @@ class _BasicScannerScreenState
       body: Stack(
         children: [
           _buildCameraPreview(),
-          _buildScannerOverlay(
-            provider,
+          _buildScannerOverlay(            provider,
             completedRooms,
           ),
           _buildTopHud(provider),
@@ -997,7 +996,6 @@ class _BasicScannerScreenState
         name.trim().isEmpty) {
       return;
     }
-
     provider.setCurrentRoomName(
       name,
     );
@@ -1497,8 +1495,7 @@ class _BasicScannerScreenState
 
     return SizedBox(
       width: 44,
-      height: 44,
-      child: IconButton(
+      height: 44,      child: IconButton(
         onPressed: enabled && !_processing
             ? () => _closeRoom(
                   provider,
@@ -1997,8 +1994,7 @@ class _BasicScannerScreenState
         _currentMode == BasicAppMode.door
             ? 0.80
             : 1.00;
-    final initialImperialWidth =
-        MeasurementUnits.metersToFeetAndInches(
+    final initialImperialWidth =        MeasurementUnits.metersToFeetAndInches(
       initialFeatureWidth,
     );
     final featureFeetController =
@@ -2393,8 +2389,10 @@ class _BasicScannerScreenState
                               : null;
                     });
 
-                    if (distance == null ||                        distance <= 0 ||
-                                 (featureMode &&
+                    if (distance == null ||
+                        distance <= 0 ||
+                        angle == null ||
+                        (featureMode &&
                             (featureWidth ==
                                     null ||
                                 featureWidth <
@@ -2495,8 +2493,7 @@ class _BasicScannerScreenState
             const SizedBox(width: 10),
             Expanded(
               child: TextField(
-                controller: inchesController,
-                keyboardType: keyboardType,
+                controller: inchesController,                keyboardType: keyboardType,
                 decoration: InputDecoration(
                   labelText: l10n.inches,
                   border: const OutlineInputBorder(),
@@ -2995,8 +2992,7 @@ class _ScannerGuidePainter
         linePaint,
       );    }
 
-    for (final feature in features) {
-      final featurePaint = Paint()
+    for (final feature in features) {      final featurePaint = Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth =
             feature.id ==
