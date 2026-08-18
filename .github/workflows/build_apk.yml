@@ -50,14 +50,22 @@ jobs:
 
       - name: Build versioned APK
         run: |
+          VERSION_CODE="$(date -u +%y%m%d%H)"
+
           flutter build apk \
             --debug \
             --android-skip-build-dependency-validation \
             --build-name="2.6.${{ github.run_number }}" \
-            --build-number="${{ github.run_number }}"
+            --build-number="$VERSION_CODE"
 
           cp build/app/outputs/flutter-apk/app-debug.apk \
             "build/app/outputs/flutter-apk/room-scanner-build-${{ github.run_number }}.apk"
+
+          APK_PATH="build/app/outputs/flutter-apk/room-scanner-build-${{ github.run_number }}.apk"
+          APK_SIGNER="$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -n 1)"
+
+          echo "Android versionCode: $VERSION_CODE"
+          "$APK_SIGNER" verify --print-certs "$APK_PATH"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
