@@ -597,8 +597,7 @@ class _FloorPlanViewerScreenState
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(                      '${localizations.wallLength}: '
-                      '${_formatLength(placement.wallLengthMeters, measurementSystem)}',
+                    Text(                      '${localizations.wallLength}: '                      '${_formatLength(placement.wallLengthMeters, measurementSystem)}',
                     ),
                     const SizedBox(height: 16),
                     lengthFields(
@@ -860,6 +859,40 @@ class _FloorPlanViewerScreenState
         '${localizations.feet.toLowerCase()} '
         '${_formatDecimal(imperial.inches)} '
         '${localizations.inches.toLowerCase()}';
+  }
+
+  String _formatOpeningPlanDimensions(
+    WallFeature feature,
+    MeasurementSystem measurementSystem,
+  ) {
+    final localizations = AppLocalizations.of(context)!;
+    final width = _formatLength(
+      _featureWidth(feature),
+      measurementSystem,
+    );
+    final height = _formatLength(
+      feature.openingHeightMeters,
+      measurementSystem,
+    );
+
+    if (feature.type == FeatureType.door) {
+      return localizations.doorPlanDimensions(width, height);
+    }
+
+    final sill = _formatLength(
+      feature.sillHeightMeters,
+      measurementSystem,
+    );
+    final orientation = _featureWidth(feature) >=
+            feature.openingHeightMeters
+        ? localizations.horizontalOrientation
+        : localizations.verticalOrientation;
+    return localizations.windowPlanDimensions(
+      width,
+      height,
+      sill,
+      orientation,
+    );
   }
 
   String _formatArea(
@@ -1163,8 +1196,7 @@ class _FloorPlanViewerScreenState
                 rooms,
               );
 
-              return Stack(
-                children: [
+              return Stack(                children: [
                   InteractiveViewer(
                     constrained: true,
                     boundaryMargin:
@@ -1243,6 +1275,11 @@ class _FloorPlanViewerScreenState
                             formatLength: (length) =>
                                 _formatLength(
                               length,
+                              measurementSystem,
+                            ),
+                            formatOpeningDimensions: (feature) =>
+                                _formatOpeningPlanDimensions(
+                              feature,
                               measurementSystem,
                             ),
                           ),
@@ -1350,6 +1387,7 @@ class _FloorPlanViewerScreenState
         .exportToPdf(
       provider.completedRooms,
       provider.projectName,
+      context.read<MeasurementSettingsProvider>().system,
     );
   }
   // ===========================================================================
@@ -1757,8 +1795,7 @@ class _FloorPlanViewerScreenState
     RoomModel room,
   ) async {
     final controller =
-        TextEditingController(
-      text: room.name,
+        TextEditingController(      text: room.name,
     );
 
     final newName =
@@ -2073,12 +2110,15 @@ class FloorPlanPainter
       formatArea;
   final String Function(double)
       formatLength;
+  final String Function(WallFeature)
+      formatOpeningDimensions;
 
   const FloorPlanPainter({
     required this.rooms,
     required this.transform,
     required this.formatArea,
     required this.formatLength,
+    required this.formatOpeningDimensions,
     this.selectedRoomId,
     this.selectedFeatureId,
   });
@@ -2354,7 +2394,6 @@ class FloorPlanPainter
     )..layout(
         maxWidth: 140,
       );
-
     final backgroundRect =
         Rect.fromCenter(
       center: center,
@@ -2691,14 +2730,9 @@ class FloorPlanPainter
         dimensionPaint,
       );
 
-      final openingWidth =
-          GeometryService.calculateDistance(
-        feature.start,
-        feature.end,
-      );
       final textPainter = TextPainter(
         text: TextSpan(
-          text: formatLength(openingWidth),
+          text: formatOpeningDimensions(feature),
           style: TextStyle(
             color: color,
             fontSize: 9,
@@ -2707,7 +2741,7 @@ class FloorPlanPainter
         ),
         textAlign: TextAlign.center,
         textDirection: TextDirection.ltr,
-        maxLines: 1,
+        maxLines: 2,
       )..layout();
       final center = Offset(
         (dimensionStart.dx + dimensionEnd.dx) / 2,
@@ -2959,8 +2993,7 @@ class FloorPlanPainter
         index++) {
       final nextIndex =
           (index + 1) % wallPoints.length;
-      final distance = _distanceToSegment(
-        point,
+      final distance = _distanceToSegment(        point,
         wallPoints[index],
         wallPoints[nextIndex],
       );
