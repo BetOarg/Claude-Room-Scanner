@@ -595,8 +595,7 @@ class _BasicScannerScreenState
       ),
     );
   }
-  Widget _buildTopHud(    ScannerProvider provider,
-  ) {
+  Widget _buildTopHud(    ScannerProvider provider,  ) {
     final l10n =
         AppLocalizations.of(context)!;
 
@@ -1164,7 +1163,6 @@ class _BasicScannerScreenState
   }
   Widget _buildModeSelector() {
     final l10n =        AppLocalizations.of(context)!;
-
     return Row(
       children: [
         Expanded(
@@ -1739,8 +1737,7 @@ class _BasicScannerScreenState
     final angleController = TextEditingController(
       text: _formatAngle(_lastAngleDegrees),    );
 
-    final featureWidthController =
-        TextEditingController(
+    final featureWidthController =        TextEditingController(
       text:
           _currentMode ==
                   BasicAppMode.door
@@ -2292,8 +2289,7 @@ class _BasicScannerScreenState
         SnackBar(          behavior:
               SnackBarBehavior.floating,
           backgroundColor:
-              Colors.red.shade800,
-          duration:
+              Colors.red.shade800,          duration:
               const Duration(
             seconds: 4,
           ),
@@ -2609,7 +2605,7 @@ class _ScannerGuidePainter
       return Offset(
         center.dx +
             point.x * scale,
-        center.dy -
+        center.dy +
             point.z * scale,
       );
     }).toList();
@@ -2617,7 +2613,7 @@ class _ScannerGuidePainter
     Offset projectPoint(ARPoint point) {
       return Offset(
         center.dx + point.x * scale,
-        center.dy - point.z * scale,
+        center.dy + point.z * scale,
       );
     }
 
