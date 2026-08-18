@@ -128,5 +128,7 @@
   "metricSystem": "Metros",
   "imperialSystem": "Pies y pulgadas",
   "feet": "Pies",
-  "inches": "Pulgadas"
+  "inches": "Pulgadas",
+  "squareMeters": "metros cuadrados",
+  "squareFeet": "pies cuadrados"
 }
