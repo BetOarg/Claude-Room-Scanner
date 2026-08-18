@@ -15,6 +15,7 @@ import '../scanner/adapters/basic_scanner_adapter.dart';
 import '../scanner/models/scanner_mode.dart';
 import '../scanner/models/scanner_point.dart';
 import '../scanner/services/scanner_permission_service.dart';
+import '../utils/measurement_units.dart';
 import '../utils/scan_validator.dart';
 import 'floor_plan_viewer_screen.dart';
 
@@ -60,6 +61,8 @@ class _BasicScannerScreenState
 
   BasicAppMode _currentMode =
       BasicAppMode.wall;
+  MeasurementSystem _measurementSystem =
+      MeasurementSystem.metric;
 
   bool _initializing = true;
   bool _cameraReady = false;
@@ -594,8 +597,7 @@ class _BasicScannerScreenState
           width:
               controller.value.previewSize?.height ??
                   MediaQuery.of(context)
-                      .size
-                      .width,
+                      .size                      .width,
           height:              controller.value.previewSize?.width ??
                   MediaQuery.of(context)                      .size                      .height,
           child: CameraPreview(            controller,
@@ -1194,8 +1196,7 @@ class _BasicScannerScreenState
   Widget _buildModeSelector() {
     final l10n =        AppLocalizations.of(context)!;
     return Row(
-      children: [
-        Expanded(          child: _modeButton(
+      children: [        Expanded(          child: _modeButton(
             BasicAppMode.wall,            Icons.wallpaper,            l10n.wall,
           ),
         ),
@@ -1794,8 +1795,7 @@ class _BasicScannerScreenState
             ),
           ),
         ],      ),
-    );
-    return confirmed ?? false;
+    );    return confirmed ?? false;
   }
 
   Future<void> _captureFeature(
@@ -1983,6 +1983,10 @@ class _BasicScannerScreenState
 
     final distanceController =
         TextEditingController();
+    final distanceFeetController =
+        TextEditingController();
+    final distanceInchesController =
+        TextEditingController();
 
     final angleController = TextEditingController(
       text: _formatAngle(_lastAngleDegrees),    );
@@ -1994,6 +1998,26 @@ class _BasicScannerScreenState
               ? '0,80'
               : '1,00',
     );
+    final initialFeatureWidth =
+        _currentMode == BasicAppMode.door
+            ? 0.80
+            : 1.00;
+    final initialImperialWidth =
+        MeasurementUnits.metersToFeetAndInches(
+      initialFeatureWidth,
+    );
+    final featureFeetController =
+        TextEditingController(
+      text: initialImperialWidth.feet.toString(),
+    );
+    final featureInchesController =
+        TextEditingController(
+      text: _formatUnitNumber(
+        initialImperialWidth.inches,
+      ),
+    );
+    var selectedMeasurementSystem =
+        _measurementSystem;
     double? distanceError;
     double? angleError;
     double? featureWidthError;
@@ -2064,33 +2088,67 @@ class _BasicScannerScreenState
                     const SizedBox(
                       height: 16,
                     ),
-                    TextField(
-                      controller:
-                          distanceController,
-                      autofocus: true,
-                      keyboardType:                          const TextInputType
-                              .numberWithOptions(
-                        decimal: true,
+                    Text(
+                      l10n.measurementSystem,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
                       ),
-                      decoration:
-                          InputDecoration(
-                        labelText:                            l10n.distance,
-                        hintText:
-                            l10n.distanceExample,
-                        suffixText:
-                            l10n.meters,
-                        prefixIcon:
-                            const Icon(
-                          Icons.straighten,
+                    ),
+                    const SizedBox(height: 8),
+                    SegmentedButton<MeasurementSystem>(
+                      segments: [
+                        ButtonSegment<MeasurementSystem>(
+                          value: MeasurementSystem.metric,
+                          label: Text(l10n.metricSystem),
+                          icon: const Icon(Icons.straighten),
                         ),
-                        errorText:
-                            distanceError !=
-                                    null
-                                ? l10n.enterPositiveDistance
-                                : null,
-                        border:
-                            const OutlineInputBorder(),
-                      ),
+                        ButtonSegment<MeasurementSystem>(
+                          value: MeasurementSystem.imperial,
+                          label: Text(l10n.imperialSystem),
+                          icon: const Icon(Icons.square_foot),
+                        ),
+                      ],
+                      selected: <MeasurementSystem>{
+                        selectedMeasurementSystem,
+                      },
+                      onSelectionChanged: (selection) {
+                        final newSystem = selection.first;
+                        _convertLengthControllers(
+                          from: selectedMeasurementSystem,
+                          to: newSystem,
+                          metricController: distanceController,
+                          feetController: distanceFeetController,
+                          inchesController: distanceInchesController,
+                        );
+                        _convertLengthControllers(
+                          from: selectedMeasurementSystem,
+                          to: newSystem,
+                          metricController: featureWidthController,
+                          feetController: featureFeetController,
+                          inchesController: featureInchesController,
+                        );
+
+                        setDialogState(() {
+                          selectedMeasurementSystem = newSystem;
+                          _measurementSystem = newSystem;
+                          distanceError = null;
+                          featureWidthError = null;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    _buildLengthFields(
+                      system: selectedMeasurementSystem,
+                      metricController: distanceController,
+                      feetController: distanceFeetController,
+                      inchesController: distanceInchesController,
+                      label: l10n.distance,
+                      metricHint: l10n.distanceExample,
+                      errorText: distanceError != null
+                          ? l10n.enterPositiveDistance
+                          : null,
+                      autofocus: true,
                     ),
                     const SizedBox(
                       height: 16,
@@ -2133,37 +2191,18 @@ class _BasicScannerScreenState
                       const SizedBox(
                         height: 16,
                       ),
-                      TextField(
-                        controller:
-                            featureWidthController,
-                        keyboardType:
-                            const TextInputType
-                                .numberWithOptions(
-                          decimal: true,
-                        ),
-                        decoration:
-                            InputDecoration(
-                          labelText:
-                              _currentMode ==
-                                  BasicAppMode.door
-                                  ? l10n.doorWidth
-                                  : l10n.windowWidth,
-                          hintText:
-                              l10n.widthExample,
-                          suffixText:
-                              l10n.meters,
-                          prefixIcon:
-                              const Icon(
-                            Icons.width_normal,
-                          ),
-                          errorText:
-                              featureWidthError !=
-                                      null
-                                  ? l10n.enterMinimumOpeningWidth
-                                  : null,
-                          border:
-                              const OutlineInputBorder(),
-                        ),
+                      _buildLengthFields(
+                        system: selectedMeasurementSystem,
+                        metricController: featureWidthController,
+                        feetController: featureFeetController,
+                        inchesController: featureInchesController,
+                        label: _currentMode == BasicAppMode.door
+                            ? l10n.doorWidth
+                            : l10n.windowWidth,
+                        metricHint: l10n.widthExample,
+                        errorText: featureWidthError != null
+                            ? l10n.enterMinimumOpeningWidth
+                            : null,
                       ),
                     ],
                     const SizedBox(
@@ -2310,9 +2349,11 @@ class _BasicScannerScreenState
                 FilledButton.icon(
                   onPressed: () {
                     final distance =
-                        _parseNumber(
-                      distanceController
-                          .text,
+                        _lengthInputToMeters(
+                      system: selectedMeasurementSystem,
+                      metricController: distanceController,
+                      feetController: distanceFeetController,
+                      inchesController: distanceInchesController,
                     );
 
                     final angle =
@@ -2323,9 +2364,11 @@ class _BasicScannerScreenState
 
                     final featureWidth =
                         featureMode
-                            ? _parseNumber(
-                                featureWidthController
-                                    .text,
+                            ? _lengthInputToMeters(
+                                system: selectedMeasurementSystem,
+                                metricController: featureWidthController,
+                                feetController: featureFeetController,
+                                inchesController: featureInchesController,
                               )
                             : null;
 
@@ -2351,8 +2394,7 @@ class _BasicScannerScreenState
                               : null;
                     });
 
-                    if (distance == null ||
-                        distance <= 0 ||
+                    if (distance == null ||                        distance <= 0 ||
                         angle == null ||
                         (featureMode &&
                             (featureWidth ==
@@ -2391,6 +2433,194 @@ class _BasicScannerScreenState
         );
       },
     );
+  }
+
+  Widget _buildLengthFields({
+    required MeasurementSystem system,
+    required TextEditingController metricController,
+    required TextEditingController feetController,
+    required TextEditingController inchesController,
+    required String label,
+    required String metricHint,
+    String? errorText,
+    bool autofocus = false,
+  }) {
+    final l10n =
+        AppLocalizations.of(context)!;
+    const keyboardType =
+        TextInputType.numberWithOptions(
+      decimal: true,
+    );
+
+    if (system == MeasurementSystem.metric) {
+      return TextField(
+        controller: metricController,
+        autofocus: autofocus,
+        keyboardType: keyboardType,
+        decoration: InputDecoration(
+          labelText: label,
+          hintText: metricHint,
+          suffixText: l10n.meters,
+          prefixIcon: const Icon(
+            Icons.straighten,
+          ),
+          errorText: errorText,
+          border: const OutlineInputBorder(),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment:
+          CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: feetController,
+                autofocus: autofocus,
+                keyboardType: keyboardType,
+                decoration: InputDecoration(
+                  labelText: l10n.feet,
+                  border: const OutlineInputBorder(),
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: TextField(
+                controller: inchesController,
+                keyboardType: keyboardType,
+                decoration: InputDecoration(
+                  labelText: l10n.inches,
+                  border: const OutlineInputBorder(),
+                ),
+              ),
+            ),
+          ],
+        ),
+        if (errorText != null) ...[
+          const SizedBox(height: 6),
+          Text(
+            errorText,
+            style: TextStyle(
+              color: Theme.of(context)
+                  .colorScheme
+                  .error,
+              fontSize: 12,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  double? _lengthInputToMeters({
+    required MeasurementSystem system,
+    required TextEditingController metricController,
+    required TextEditingController feetController,
+    required TextEditingController inchesController,
+  }) {
+    if (system == MeasurementSystem.metric) {
+      return MeasurementUnits.metricInputToMeters(
+        metricController.text,
+      );
+    }
+
+    return MeasurementUnits.imperialInputToMeters(
+      feetInput: feetController.text,
+      inchesInput: inchesController.text,
+    );
+  }
+
+  void _convertLengthControllers({
+    required MeasurementSystem from,
+    required MeasurementSystem to,
+    required TextEditingController metricController,
+    required TextEditingController feetController,
+    required TextEditingController inchesController,
+  }) {
+    if (from == to) {
+      return;
+    }
+
+    if (to == MeasurementSystem.imperial) {
+      final meters =
+          MeasurementUnits.metricInputToMeters(
+        metricController.text,
+      );
+
+      if (meters == null) {
+        feetController.clear();
+        inchesController.clear();
+        return;
+      }
+
+      final imperial =
+          MeasurementUnits.metersToFeetAndInches(
+        meters,
+      );
+
+      feetController.text =
+          imperial.feet.toString();
+      inchesController.text =
+          _formatUnitNumber(
+        imperial.inches,
+      );
+      return;
+    }
+
+    final meters =
+        MeasurementUnits.imperialInputToMeters(
+      feetInput: feetController.text,
+      inchesInput: inchesController.text,
+    );
+
+    if (meters == null) {
+      metricController.clear();
+      return;
+    }
+
+    metricController.text =
+        _formatUnitNumber(meters);
+  }
+
+  String _formatUnitNumber(
+    double value,
+  ) {
+    var formatted =
+        value.toStringAsFixed(2);
+
+    while (formatted.contains('.') &&
+        formatted.endsWith('0')) {
+      formatted = formatted.substring(
+        0,
+        formatted.length - 1,
+      );
+    }
+
+    if (formatted.endsWith('.')) {
+      formatted = formatted.substring(
+        0,
+        formatted.length - 1,
+      );
+    }
+
+    final languageCode =
+        Localizations.localeOf(context)
+            .languageCode;
+
+    return languageCode == 'es'
+        ? formatted.replaceAll('.', ',')
+        : formatted;
   }
 
   Widget _angleChip(
@@ -2763,8 +2993,7 @@ class _ScannerGuidePainter
         i < projected.length - 1;
         i++) {
       canvas.drawLine(
-        projected[i],
-        projected[i + 1],
+        projected[i],        projected[i + 1],
         linePaint,
       );
     }
