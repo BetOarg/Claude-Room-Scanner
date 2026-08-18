@@ -65,7 +65,7 @@ class _BasicScannerScreenState
   String? _initializationError;
 
   int get _protectedInitialPointCount =>
-      widget.continuationReference == null ? 0 : 2;
+      0;
 
   @override
   void initState() {
@@ -192,10 +192,6 @@ class _BasicScannerScreenState
       y: 0.0,
       z: 0.0,
     );
-    final initialPoints = <ARPoint>[
-      other,
-      origin,
-    ];
     final sharedFeature = WallFeature(
       id: continuation.featureId,
       type: continuation.featureType,
@@ -204,21 +200,18 @@ class _BasicScannerScreenState
     );
 
     provider.startNewRoom(
-      initialPoints: initialPoints,
       initialFeatures: <WallFeature>[sharedFeature],
     );
 
     _scannerAdapter.seedPath(
-      initialPoints
-          .map(
-            (point) => ScannerPoint(
-              x: point.x,
-              y: point.y,
-              z: point.z,
-              source: PointSource.manual,
-            ),
-          )
-          .toList(),
+      <ScannerPoint>[
+        ScannerPoint(
+          x: origin.x,
+          y: origin.y,
+          z: origin.z,
+          source: PointSource.manual,
+        ),
+      ],
     );
   }
 
@@ -504,8 +497,7 @@ class _BasicScannerScreenState
                   MediaQuery.of(context)
                       .size
                       .width,
-          height:
-              controller.value.previewSize?.width ??
+          height:              controller.value.previewSize?.width ??
                   MediaQuery.of(context)
                       .size
                       .height,
@@ -684,7 +676,7 @@ class _BasicScannerScreenState
                   child: Text(
                     count == 0
                         ? continuation != null
-                            ? 'Ubicate en la abertura mirando hacia el ambiente nuevo y marcá el inicio.'
+                            ? 'Desde el punto verde, medí la distancia hasta la primera esquina real del ambiente.'
                             : 'Marcá el punto inicial de la habitación.'
                         : 'Medí la distancia hasta la próxima esquina y elegí su dirección.',
                     style:
@@ -1004,7 +996,6 @@ class _BasicScannerScreenState
         );
       },
     );
-
     if (selected == null ||
         !mounted) {
       return;
@@ -1342,7 +1333,9 @@ class _BasicScannerScreenState
     if (_processing) {
       label = l10n.calculating;
     } else if (count == 0) {
-      label = l10n.markStart;
+      label = widget.continuationReference == null
+          ? l10n.markStart
+          : 'Medir primera esquina';
     } else if (_currentMode ==
         BasicAppMode.wall) {
       label = l10n.measureNextCorner;
@@ -1449,6 +1442,20 @@ class _BasicScannerScreenState
     HapticFeedback.lightImpact();
 
     if (provider.currentPointsCount == 0) {
+      if (widget.continuationReference != null) {
+        if (_currentMode != BasicAppMode.wall) {
+          _showMessage(
+            'Primero medí la primera esquina real del ambiente.',
+          );
+          return;
+        }
+
+        await _captureWallPoint(
+          provider,
+        );
+        return;
+      }
+
       final point =
           _scannerAdapter
               .captureInitialPoint();
@@ -1488,12 +1495,15 @@ class _BasicScannerScreenState
 
     await _captureWallPoint(
       provider,
-    );
-  }
+    );  }
 
   Future<void> _captureWallPoint(
     ScannerProvider provider,
   ) async {
+    final isFirstContinuationCorner =
+        widget.continuationReference != null &&
+            provider.currentPointsCount == 0;
+
     final measurement =
         await _showMeasurementDialog(      nextCorner:
           provider.currentPointsCount + 1,
@@ -1550,6 +1560,12 @@ class _BasicScannerScreenState
           .commitPendingPoint(
         candidate,
       );
+
+      if (isFirstContinuationCorner) {
+        _showMessage(
+          'Primera esquina registrada. Continuá midiendo las paredes del ambiente.',
+        );
+      }
 
       if (result.warningMessage != null) {
         _showMessage(
@@ -1978,8 +1994,7 @@ class _BasicScannerScreenState
                     const SizedBox(height: 12),
                     Row(
                       children: [
-                        Expanded(
-                          child: OutlinedButton(
+                        Expanded(                          child: OutlinedButton(
                             onPressed: () => _adjustAngle(
                               angleController,
                               -5.0,
@@ -2478,8 +2493,7 @@ class _ScannerGuidePainter
 
     if (visiblePoints.isEmpty) {
       _drawCenterGuide(
-        canvas,
-        size,
+        canvas,        size,
       );
       return;
     }
