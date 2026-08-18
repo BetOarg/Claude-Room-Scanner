@@ -79,9 +79,17 @@ class IsarWallFeature {
 
   late IsarARPoint start;
   late IsarARPoint end;
+
+  @enumerated
+  IsarDoorHingeSide doorHingeSide = IsarDoorHingeSide.start;
+
+  @enumerated
+  IsarDoorSwingSide doorSwingSide = IsarDoorSwingSide.left;
 }
 
 enum IsarFeatureType { door, window }
+enum IsarDoorHingeSide { start, end }
+enum IsarDoorSwingSide { left, right }
 
 // ==========================================
 // MAPEADORES DE CONVERSIÓN CON ROOMMODEL
@@ -101,7 +109,13 @@ extension WallFeatureIsarMapper on WallFeature {
       ..id = id
       ..type = type == FeatureType.door ? IsarFeatureType.door : IsarFeatureType.window
       ..start = start.toIsar()
-      ..end = end.toIsar();
+      ..end = end.toIsar()
+      ..doorHingeSide = doorHingeSide == DoorHingeSide.start
+          ? IsarDoorHingeSide.start
+          : IsarDoorHingeSide.end
+      ..doorSwingSide = doorSwingSide == DoorSwingSide.left
+          ? IsarDoorSwingSide.left
+          : IsarDoorSwingSide.right;
   }
 }
 
@@ -112,6 +126,12 @@ extension IsarWallFeatureMapper on IsarWallFeature {
       type: type == IsarFeatureType.door ? FeatureType.door : FeatureType.window,
       start: start.toDomain(),
       end: end.toDomain(),
+      doorHingeSide: doorHingeSide == IsarDoorHingeSide.start
+          ? DoorHingeSide.start
+          : DoorHingeSide.end,
+      doorSwingSide: doorSwingSide == IsarDoorSwingSide.left
+          ? DoorSwingSide.left
+          : DoorSwingSide.right,
     );
   }
 }
