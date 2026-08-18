@@ -597,8 +597,7 @@ class _FloorPlanViewerScreenState
               onPressed: () {
                 Navigator.pop(
                   dialogContext,
-                  true,
-                );
+                  true,                );
               },
               icon: const Icon(
                 Icons.auto_awesome,
@@ -1197,8 +1196,7 @@ class _FloorPlanViewerScreenState
                               ),
                               subtitle: Text(
                                 '${_formatArea(area, measurementSystem)} · '
-                                '${_formatLength(perimeter, measurementSystem)} de perímetro'
-                                ' · '
+                                '${_formatLength(perimeter, measurementSystem)} de perímetro'                                ' · '
                                 '${room.points.length} esquinas',
                               ),
                               trailing:
@@ -1758,6 +1756,21 @@ class FloorPlanPainter
       ..style = PaintingStyle.fill;
     final dimensionedFeatureIds =
         <String>{};
+    final featureOwnerRoomIds = <String, String>{};
+
+    for (final room in rooms) {
+      for (final feature in room.features) {
+        featureOwnerRoomIds.putIfAbsent(
+          feature.id,
+          () => room.id,
+        );
+
+        if (room.id == selectedRoomId &&
+            feature.id == selectedFeatureId) {
+          featureOwnerRoomIds[feature.id] = room.id;
+        }
+      }
+    }
 
     for (final room in rooms) {
       _drawRoom(
@@ -1780,8 +1793,8 @@ class FloorPlanPainter
         windowPaint,
         selectedPaint,
         referencePaint,
+        featureOwnerRoomIds,
       );
-
       _drawWallDimensions(
         canvas,
         room,
@@ -2381,8 +2394,7 @@ class FloorPlanPainter
         secondProjection,
       );
       final wallLength =
-          math.sqrt(wallLengthSquared);
-      final openingStartOnWall =
+          math.sqrt(wallLengthSquared);      final openingStartOnWall =
           roomScreenPoints[wallIndex] +
               wallDirection *
                   openingStartProjection;
@@ -2601,9 +2613,14 @@ class FloorPlanPainter
     Paint windowPaint,
     Paint selectedPaint,
     Paint referencePaint,
+    Map<String, String> featureOwnerRoomIds,
   ) {
     for (final feature
         in room.features) {
+      if (featureOwnerRoomIds[feature.id] != room.id) {
+        continue;
+      }
+
       final start =
           transform(
         feature.start,
@@ -2628,18 +2645,21 @@ class FloorPlanPainter
 
       switch (feature.type) {
         case FeatureType.door:
-          canvas.drawLine(
-            start,
-            end,
-            doorPaint,
+          _drawProfessionalDoor(
+            canvas: canvas,
+            room: room,
+            start: start,
+            end: end,
+            paint: doorPaint,
           );
           break;
 
         case FeatureType.window:
-          canvas.drawLine(
-            start,
-            end,
-            windowPaint,
+          _drawProfessionalWindow(
+            canvas: canvas,
+            start: start,
+            end: end,
+            paint: windowPaint,
           );
           break;
       }
@@ -2653,6 +2673,178 @@ class FloorPlanPainter
         );
       }
     }
+  }
+
+  void _drawProfessionalDoor({
+    required Canvas canvas,
+    required RoomModel room,
+    required Offset start,
+    required Offset end,
+    required Paint paint,
+  }) {
+    final opening = end - start;
+    final width = opening.distance;
+
+    if (width <= 0.000001) {
+      return;
+    }
+
+    final tangent = opening / width;
+    final inwardNormal = _roomInwardNormal(
+      room,
+      Offset(
+        (start.dx + end.dx) / 2,
+        (start.dy + end.dy) / 2,
+      ),
+    );
+    final erasePaint = Paint()
+      ..color = Colors.white
+      ..strokeWidth = 7
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.square;
+    final symbolPaint = Paint()
+      ..color = paint.color
+      ..strokeWidth = 2
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.square;
+    final leafEnd = start + inwardNormal * width;
+
+    // Interrumpe gráficamente la pared en el ancho real de la puerta.
+    canvas.drawLine(start, end, erasePaint);
+
+    // Hoja abierta a 90 grados hacia el interior del ambiente.
+    canvas.drawLine(start, leafEnd, symbolPaint);
+    canvas.drawCircle(
+      start,
+      2.5,
+      Paint()
+        ..color = paint.color
+        ..style = PaintingStyle.fill,
+    );
+
+    final startAngle = math.atan2(
+      tangent.dy,
+      tangent.dx,
+    );
+    final inwardAngle = math.atan2(
+      inwardNormal.dy,
+      inwardNormal.dx,
+    );
+    final sweepAngle = _shortestSweep(
+      startAngle,
+      inwardAngle,
+    );
+
+    canvas.drawArc(
+      Rect.fromCircle(
+        center: start,
+        radius: width,
+      ),
+      startAngle,
+      sweepAngle,
+      false,
+      symbolPaint,
+    );
+  }
+
+  void _drawProfessionalWindow({
+    required Canvas canvas,
+    required Offset start,
+    required Offset end,
+    required Paint paint,
+  }) {
+    final opening = end - start;
+    final width = opening.distance;
+
+    if (width <= 0.000001) {
+      return;
+    }
+
+    final tangent = opening / width;
+    final normal = Offset(-tangent.dy, tangent.dx);
+    final erasePaint = Paint()
+      ..color = Colors.white
+      ..strokeWidth = 7
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.square;
+    final symbolPaint = Paint()
+      ..color = paint.color
+      ..strokeWidth = 2
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.square;
+    const railOffset = 2.5;
+
+    canvas.drawLine(start, end, erasePaint);
+    canvas.drawLine(
+      start + normal * railOffset,
+      end + normal * railOffset,
+      symbolPaint,
+    );
+    canvas.drawLine(
+      start - normal * railOffset,
+      end - normal * railOffset,
+      symbolPaint,
+    );
+    canvas.drawLine(
+      start - normal * 5,
+      start + normal * 5,
+      symbolPaint,
+    );
+    canvas.drawLine(
+      end - normal * 5,
+      end + normal * 5,
+      symbolPaint,
+    );
+  }
+
+  Offset _roomInwardNormal(
+    RoomModel room,
+    Offset openingMidpoint,
+  ) {
+    final points = room.points
+        .map(transform)
+        .toList(growable: false);
+    final wallIndex = _nearestWallIndex(
+      openingMidpoint,
+      points,
+    );
+
+    if (wallIndex < 0 || points.length < 3) {
+      return const Offset(0, 1);
+    }
+
+    final wall =
+        points[(wallIndex + 1) % points.length] -
+            points[wallIndex];
+    final wallLength = wall.distance;
+
+    if (wallLength <= 0.000001) {
+      return const Offset(0, 1);
+    }
+
+    final tangent = wall / wallLength;
+    final signedArea = _screenSignedArea(points);
+
+    return signedArea > 0
+        ? Offset(-tangent.dy, tangent.dx)
+        : Offset(tangent.dy, -tangent.dx);
+  }
+
+  double _shortestSweep(
+    double startAngle,
+    double endAngle,
+  ) {
+    var sweep = endAngle - startAngle;
+
+    while (sweep > math.pi) {
+      sweep -= math.pi * 2;
+    }
+
+    while (sweep < -math.pi) {
+      sweep += math.pi * 2;
+    }
+
+    return sweep;
   }
 
   void _drawContinuationPoint(
