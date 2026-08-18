@@ -1,910 +1,448 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import 'package:ar_flutter_plugin_2/ar_flutter_plugin.dart';
-import 'package:ar_flutter_plugin_2/datatypes/config_planedetection.dart';
-import 'package:ar_flutter_plugin_2/managers/ar_location_manager.dart';
-import 'package:ar_flutter_plugin_2/managers/ar_session_manager.dart';
-import 'package:ar_flutter_plugin_2/managers/ar_object_manager.dart';
-import 'package:ar_flutter_plugin_2/managers/ar_anchor_manager.dart';
-import 'package:vector_math/vector_math_64.dart' as vector;
 
 import '../l10n/generated/app_localizations.dart';
-import '../l10n/room_type_localization.dart';
 import '../models/room_model.dart';
 import '../providers/floor_plan_provider.dart';
 import '../providers/measurement_settings_provider.dart';
-import '../providers/scanner_provider.dart';
-import '../services/permission_service.dart';
+import '../services/geometry_service.dart';
+import '../services/import_export_service.dart';
+import '../services/ar_check_service.dart';
 import '../utils/measurement_units.dart';
-import '../utils/scan_validator.dart';
-import '../scanner/adapters/ar_scanner_adapter.dart';
-import 'floor_plan_viewer_screen.dart';
+import 'measurement_editor_screen.dart';
 
-enum AppMode {
-  wall,
-  door,
-  window,
-}
-
-class ARScannerScreen extends StatefulWidget {
-  /// UUID del proyecto Isar al que pertenece este escaneo.
-  final String projectUuid;
-
-  final String projectName;
-
-  /// Abertura global seleccionada en el plano 2D para continuar el escaneo.
-  ///
-  /// En ARCore/ARKit sus extremos se utilizarán como destino global después
-  /// de que el usuario vuelva a marcar la abertura en la nueva sesión AR.
-  final ScanContinuationReference? continuationReference;
-
-  const ARScannerScreen({
+class FloorPlanViewerScreen extends StatefulWidget {
+  const FloorPlanViewerScreen({
     super.key,
-    required this.projectUuid,
-    required this.projectName,
-    this.continuationReference,
   });
 
   @override
-  State<ARScannerScreen> createState() => _ARScannerScreenState();
+  State<FloorPlanViewerScreen> createState() =>
+      _FloorPlanViewerScreenState();
 }
 
-class _ARScannerScreenState extends State<ARScannerScreen>
-    with WidgetsBindingObserver {
-  AppMode _currentMode = AppMode.wall;
+class _FloorPlanViewerScreenState
+    extends State<FloorPlanViewerScreen> {
+  double _minX = 0.0;
+  double _minZ = 0.0;
+  double _scale = 1.0;
+  double _padding = 20.0;
 
-  ARPoint? _pendingFeatureStart;
-  AppMode? _pendingFeatureMode;
+  String? _selectedRoomId;
+  String? _selectedFeatureId;
 
-  vector.Vector3? _continuationSessionStart;
-  vector.Vector3? _continuationSessionEnd;
+  // ===========================================================================
+  // TRANSFORMACIÓN PLANO ↔ PANTALLA
+  // ===========================================================================
 
-  bool get _requiresContinuationCalibration =>
-      widget.continuationReference != null;
+  Offset _transformPoint(
+    ARPoint point,
+  ) {
+    final x =
+        _padding +
+        (point.x - _minX) * _scale;
 
-  bool get _isContinuationCalibrated =>
-      !_requiresContinuationCalibration ||
-      (_continuationSessionStart != null &&
-          _continuationSessionEnd != null);
+    final z =
+        _padding +
+        (point.z - _minZ) * _scale;
 
-  // ================================================================
-  // CONTROLADORES AR
-  // ================================================================
-
-  ARSessionManager? _arSessionManager;
-  ARObjectManager? _arObjectManager;
-
-  // ================================================================
-  // SCANNER ENGINE
-  // ================================================================
-
-  /// Adapter responsable de encapsular la interacción con ARCore/ARKit.
-  ///
-  /// La pantalla no obtiene directamente la pose de la cámara.
-  /// Eso ahora pertenece al Scanner Engine.
-  final ARScannerAdapter _arScannerAdapter = ARScannerAdapter();
-
-  // Posición actual estimada del dispositivo/cámara.
-  vector.Vector3 _currentCameraPosition = vector.Vector3(0, 0, 0);
-
-  bool _permissionsGranted = false;
-  bool _checkingPermissions = true;
-
-  // ================================================================
-  // CICLO DE VIDA
-  // ================================================================
-
-  @override
-  void initState() {
-    super.initState();
-
-    WidgetsBinding.instance
-        .addObserver(this);
-
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (!mounted) return;
-
-      // Permisos del modo AR actual.
-      final granted =
-          await PermissionService.requestScannerPermissions();
-
-      if (!mounted) return;
-
-      setState(() {
-        _permissionsGranted = granted;
-        _checkingPermissions = false;
-      });
-
-      if (!granted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Se necesitan permisos de cámara y ubicación para escanear.',
-            ),
-            backgroundColor: Colors.redAccent,
-            duration: Duration(seconds: 4),
-          ),
-        );
-
-        return;
-      }
-
-      if (!mounted) return;
-
-      context.read<ScannerProvider>().startNewRoom();
-    });
+    return Offset(x, z);
   }
 
-  @override
-  void didChangeAppLifecycleState(
-    AppLifecycleState state,
+  ARPoint _inverseTransform(
+    Offset screenPosition,
   ) {
-    if (state == AppLifecycleState.inactive ||
-        state == AppLifecycleState.paused ||
-        state == AppLifecycleState.detached) {
-      _arScannerAdapter
-          .setTrackingStatus(false);
+    final x =
+        (screenPosition.dx - _padding) /
+                _scale +
+            _minX;
 
-      _pendingFeatureStart = null;
-      _pendingFeatureMode = null;
+    final z =
+        (screenPosition.dy - _padding) /
+                _scale +
+            _minZ;
 
-      if (_requiresContinuationCalibration) {
-        _continuationSessionStart = null;
-        _continuationSessionEnd = null;
-      }
+    return ARPoint(
+      x: x,
+      y: 0.0,
+      z: z,
+    );
+  }
 
-      if (mounted) {
-        context
-            .read<ScannerProvider>()
-            .updateTrackingStatus(false);
-      }
-
+  void _calculateTransform(
+    Size screenSize,
+    List<RoomModel> rooms,
+  ) {
+    if (rooms.isEmpty) {
       return;
     }
 
-    if (state == AppLifecycleState.resumed) {
-      final sessionAvailable =
-          _arSessionManager != null &&
-              _arObjectManager != null;
+    double minX = double.infinity;
+    double maxX =
+        double.negativeInfinity;
 
-      _arScannerAdapter
-          .setTrackingStatus(
-        sessionAvailable,
-      );
+    double minZ = double.infinity;
+    double maxZ =
+        double.negativeInfinity;
 
-      if (mounted) {
-        context
-            .read<ScannerProvider>()
-            .updateTrackingStatus(
-              sessionAvailable,
-            );
+    bool hasPoints = false;
+
+    for (final room in rooms) {
+      for (final point in room.points) {
+        hasPoints = true;
+
+        if (point.x < minX) {
+          minX = point.x;
+        }
+
+        if (point.x > maxX) {
+          maxX = point.x;
+        }
+
+        if (point.z < minZ) {
+          minZ = point.z;
+        }
+
+        if (point.z > maxZ) {
+          maxZ = point.z;
+        }
       }
     }
+
+    if (!hasPoints) {
+      _minX = 0.0;
+      _minZ = 0.0;
+      _scale = 1.0;
+      _padding = 20.0;
+      return;
+    }
+
+    _minX = minX;
+    _minZ = minZ;
+
+    _padding =
+        screenSize.width * 0.08;
+
+    final contentWidth =
+        (maxX - minX).abs();
+
+    final contentHeight =
+        (maxZ - minZ).abs();
+
+    final safeWidth =
+        contentWidth <= 0.0001
+            ? 1.0
+            : contentWidth;
+
+    final safeHeight =
+        contentHeight <= 0.0001
+            ? 1.0
+            : contentHeight;
+
+    final availableWidth =
+        screenSize.width -
+            (_padding * 2);
+
+    final availableHeight =
+        screenSize.height -
+            (_padding * 2);
+
+    final widthScale =
+        availableWidth / safeWidth;
+
+    final heightScale =
+        availableHeight / safeHeight;
+
+    _scale =
+        widthScale < heightScale
+            ? widthScale
+            : heightScale;
+
+    if (!_scale.isFinite ||
+        _scale <= 0) {
+      _scale = 1.0;
+    }
   }
 
-  @override
-  void dispose() {
-    WidgetsBinding.instance
-        .removeObserver(this);
-
-    _arScannerAdapter.dispose();
-
-    _arSessionManager = null;
-    _arObjectManager = null;
-
-    super.dispose();
-  }
-
-  // ================================================================
-  // AR VIEW
-  // ================================================================
-
-  void _onARViewCreated(
-    ARSessionManager arSessionManager,
-    ARObjectManager arObjectManager,
-    ARAnchorManager arAnchorManager,
-    ARLocationManager arLocationManager,
+  String? _getRoomAtPosition(
+    ARPoint point,
+    List<RoomModel> rooms,
   ) {
-    _arSessionManager = arSessionManager;
-    _arObjectManager = arObjectManager;
-
-    _arScannerAdapter.attachARSession(
-      sessionManager: arSessionManager,
-      objectManager: arObjectManager,
-    );
-
-    if (mounted) {
-      context.read<ScannerProvider>().updateTrackingStatus(true);
-    }
-  }
-
-  // ================================================================
-  // POSICIÓN DE CÁMARA
-  // ================================================================
-
-  Future<vector.Vector3?> _getCurrentCameraPosition() async {
-    final point = await _arScannerAdapter.capturePoint();
-
-    if (point == null) {
-      return null;
+    for (final room
+        in rooms.reversed) {
+      if (GeometryService
+          .isPointInPolygon(
+        point,
+        room.points,
+      )) {
+        return room.id;
+      }
     }
 
-    final position = vector.Vector3(
-      point.x,
-      point.y,
-      point.z,
+    return null;
+  }
+
+  _FeatureSelection? _getFeatureAtPosition(
+    Offset screenPosition,
+    List<RoomModel> rooms,
+  ) {
+    const touchTolerance = 18.0;
+
+    _FeatureSelection? nearest;
+    double nearestDistance = double.infinity;
+
+    for (final room in rooms.reversed) {
+      for (final feature in room.features) {
+        final distance = _distanceToSegment(
+          screenPosition,
+          _transformPoint(feature.start),
+          _transformPoint(feature.end),
+        );
+
+        if (distance <= touchTolerance &&
+            distance < nearestDistance) {
+          nearestDistance = distance;
+          nearest = _FeatureSelection(
+            roomId: room.id,
+            feature: feature,
+          );
+        }
+      }
+    }
+
+    return nearest;
+  }
+
+  double _distanceToSegment(
+    Offset point,
+    Offset start,
+    Offset end,
+  ) {
+    final segment = end - start;
+    final lengthSquared = segment.dx * segment.dx +
+        segment.dy * segment.dy;
+
+    if (lengthSquared <= 0.000001) {
+      return (point - start).distance;
+    }
+
+    final fromStart = point - start;
+    final rawT =
+        (fromStart.dx * segment.dx +
+                fromStart.dy * segment.dy) /
+            lengthSquared;
+    final t = rawT.clamp(0.0, 1.0).toDouble();
+    final projection = Offset(
+      start.dx + segment.dx * t,
+      start.dy + segment.dy * t,
     );
 
-    _currentCameraPosition = position;
-
-    return position;
+    return (point - projection).distance;
   }
-  // ================================================================
-  // BUILD
-  // ================================================================
 
-  @override  Widget build(BuildContext context) {
-    final provider = context.watch<ScannerProvider>();
+  Future<void> _showFeatureMenu(
+    _FeatureSelection selection,
+  ) async {
+    setState(() {
+      _selectedRoomId = selection.roomId;
+      _selectedFeatureId = selection.feature.id;
+    });
+
+    final feature = selection.feature;
     final measurementSystem = context
-        .watch<MeasurementSettingsProvider>()
+        .read<MeasurementSettingsProvider>()
         .system;
-    final l10n = AppLocalizations.of(context)!;
+    final label = feature.type == FeatureType.door
+        ? 'Puerta'
+        : 'Ventana';
 
-    if (_checkingPermissions) {
-      return const Scaffold(
-        backgroundColor: Colors.black,
-        body: Center(
-          child: CircularProgressIndicator(),
-        ),
-      );
-    }
-
-    if (!_permissionsGranted) {
-      return Scaffold(
-        backgroundColor: Colors.black,
-        appBar: AppBar(
-          title: const Text('Permisos requeridos'),
-        ),
-        body: const Center(
+    final shouldContinue = await showModalBottomSheet<bool>(
+      context: context,
+      builder: (bottomSheetContext) {
+        return SafeArea(
           child: Padding(
-            padding: EdgeInsets.all(24.0),
-            child: Text(
-              'No se otorgaron los permisos de cámara/ubicación. '
-              'Habilítalos desde los ajustes del sistema para poder escanear.',
-              style: TextStyle(
-                color: Colors.white70,
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ),
-        ),
-      );
-    }
-
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: Stack(
-        children: [
-          // ============================================================
-          // CAPA 1: VIEWPORT AR REAL
-          // ============================================================
-
-          ARView(
-            onARViewCreated: _onARViewCreated,
-            planeDetectionConfig:
-                PlaneDetectionConfig.horizontalAndVertical,
-          ),
-
-          // ============================================================
-          // CAPA 2: RETÍCULA CENTRAL
-          // ============================================================
-
-          Center(
-            child: Container(
-              width: 14,
-              height: 14,
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.9),
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: Colors.black,
-                  width: 2,
-                ),
-              ),
-            ),
-          ),
-
-          // ============================================================
-          // CAPA 3: HUD SUPERIOR DE ESTADO
-          // ============================================================
-
-          Positioned(
-            top: MediaQuery.of(context).padding.top + 12,
-            left: 16,
-            right: 16,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                ActionChip(
-                  tooltip:
-                      l10n.editRoomName,
-                  avatar: const Icon(
-                    Icons.edit_outlined,
-                    size: 16,
-                    color: Colors.white,
-                  ),
-                  label: Text(
-                    _localizedRoomName(
-                      provider,
-                      l10n,
-                    ),
-                  ),
-                  onPressed: () =>
-                      _showCustomRoomNameDialog(
-                    provider,
-                  ),
-                  backgroundColor:
-                      Colors.black87,
-                  labelStyle:
-                      const TextStyle(
-                    color: Colors.white,
-                  ),
-                ),
-                Row(
-                  children: [
-                    IconButton.filledTonal(
-                      tooltip: l10n.viewPlan,
-                      onPressed: _openFloorPlan,
-                      icon: const Icon(
-                        Icons.map_outlined,
-                      ),
-                      style: IconButton.styleFrom(
-                        backgroundColor: Colors.black87,
-                        foregroundColor: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Chip(
-                      avatar: Icon(
-                        Icons.circle,
-                        size: 10,
-                        color: provider.isTrackingOk
-                            ? Colors.greenAccent                            : Colors.orangeAccent,                      ),
-                      label: Text(
-                        provider.isTrackingOk
-                            ? 'AR Activo'
-                            : 'Calibrando...',
-                      ),
-                      backgroundColor: Colors.black87,
-                      labelStyle: const TextStyle(
-                        color: Colors.white,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-
-          // ============================================================
-          // CAPA 4: CONTADOR DE PUNTOS
-          // ============================================================
-
-          if (provider.currentPointsCount > 0)
-            Positioned(
-              top: MediaQuery.of(context).padding.top + 70,
-              left: 16,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.black54,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: Colors.white24,
-                  ),
-                ),
-                child: Text(
-                  'Esquinas: ${provider.currentPointsCount}',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 13,
-                  ),
-                ),
-              ),
-            ),
-
-          if (_requiresContinuationCalibration)
-            Positioned(
-              top: MediaQuery.of(context).padding.top + 112,
-              left: 16,
-              right: 16,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 11,
-                ),
-                decoration: BoxDecoration(
-                  color: _isContinuationCalibrated
-                      ? Colors.green.withValues(alpha: 0.88)
-                      : const Color(0xFFFF8A00).withValues(alpha: 0.92),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      _isContinuationCalibrated
-                          ? Icons.check_circle_outline
-                          : Icons.center_focus_strong,
-                      color: Colors.white,
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        _continuationInstruction(),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-          // ============================================================
-          // CAPA 5: CONTROLES INFERIORES
-          // ============================================================
-
-          Positioned(
-            bottom: 24,
-            left: 16,
-            right: 16,
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
             child: Column(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                PopupMenuButton<MeasurementSystem>(
-                  tooltip: l10n.measurementSystem,
-                  initialValue: measurementSystem,
-                  onSelected: (newSystem) {
-                    context
-                        .read<MeasurementSettingsProvider>()
-                        .setSystem(newSystem);
-                  },
-                  itemBuilder: (context) => [
-                    PopupMenuItem<MeasurementSystem>(
-                      value: MeasurementSystem.metric,
-                      child: ListTile(
-                        dense: true,
-                        leading: const Icon(
-                          Icons.straighten,
-                        ),
-                        title: Text(
-                          l10n.metricSystem,
-                        ),
-                      ),
-                    ),
-                    PopupMenuItem<MeasurementSystem>(
-                      value: MeasurementSystem.imperial,
-                      child: ListTile(
-                        dense: true,
-                        leading: const Icon(
-                          Icons.square_foot,
-                        ),
-                        title: Text(
-                          l10n.imperialSystem,
-                        ),
-                      ),
-                    ),
-                  ],
-                  child: Chip(
-                    avatar: Icon(
-                      measurementSystem ==
-                              MeasurementSystem.metric
-                          ? Icons.straighten
-                          : Icons.square_foot,
-                      size: 18,
-                      color: Colors.white,
-                    ),
-                    label: Text(
-                      measurementSystem ==
-                              MeasurementSystem.metric
-                          ? l10n.metricSystem
-                          : l10n.imperialSystem,
-                    ),
-                    backgroundColor: Colors.black87,
-                    labelStyle: const TextStyle(
-                      color: Colors.white,
-                    ),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(
+                    feature.type == FeatureType.door
+                        ? Icons.door_front_door
+                        : Icons.window,
+                    color: feature.type == FeatureType.door
+                        ? const Color(0xFFFF8A00)
+                        : const Color(0xFFD500F9),
+                  ),
+                  title: Text('$label seleccionada'),
+                  subtitle: Text(
+                    '${feature.isConnected ? 'Conectada' : 'Disponible'} · '
+                    '${_formatLength(_featureWidth(feature), measurementSystem)}'
+                    '${feature.isConnected ? '' : ' · Inicio en el punto marcado'}',
                   ),
                 ),
-
                 const SizedBox(height: 8),
-
-                // ------------------------------------------------------
-                // SELECTOR DE MODO
-                // ------------------------------------------------------
-
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    _buildModeChip(
-                      AppMode.wall,
-                      Icons.wallpaper,
-                      l10n.wall,
-                    ),
-                    const SizedBox(width: 8),
-                    _buildModeChip(
-                      AppMode.door,
-                      Icons.door_front_door,
-                      l10n.door,
-                    ),
-                    const SizedBox(width: 8),
-                    _buildModeChip(
-                      AppMode.window,
-                      Icons.window,
-                      l10n.window,                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 12),
-
-                // ------------------------------------------------------
-                // SELECTOR DE TIPO DE HABITACIÓN
-                // ------------------------------------------------------
-
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: RoomType.values.map((type) {
-                      final isSelected =
-                          provider.selectedType == type;
-
-                      return Padding(
-                        padding: const EdgeInsets.only(
-                          right: 8.0,
-                        ),
-                        child: ChoiceChip(
-                          label: Text(
-                            type.localizedName(l10n).toUpperCase(),
-                          ),
-                          selected: isSelected,
-                          selectedColor:
-                              Colors.blueAccent,
-                          backgroundColor:
-                              Colors.black87,
-                          labelStyle: TextStyle(
-                            color: isSelected
-                                ? Colors.white
-                                : Colors.white70,
-                            fontWeight: isSelected
-                                ? FontWeight.bold
-                                : FontWeight.normal,
-                          ),
-                          onSelected: (_) {
-                            HapticFeedback.selectionClick();
-
-                            provider.setRoomType(type);
-                          },
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                ),
-
-                const SizedBox(height: 16),
-
-                // ------------------------------------------------------
-                // BOTONES PRINCIPALES DE ESCANEO
-                // ------------------------------------------------------
-
-                Row(
-                  children: [
-                    IconButton.filledTonal(
-                      onPressed:
-                          provider.currentPointsCount > 0
-                              ? () {
-                                  HapticFeedback
-                                      .lightImpact();
-
-                                  provider.removeLastPoint();
-                                }
-                              : null,
-                      icon: const Icon(
-                        Icons.undo,
-                      ),
-                      style: IconButton.styleFrom(
-                        backgroundColor:
-                            Colors.black87,
-                        foregroundColor:
-                            Colors.white,
-                      ),
-                    ),
-
-                    const SizedBox(width: 12),
-
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: () =>
-                            _onCapturePressed(                          provider,
-                        ),
-                        icon: Icon(
-                          _currentMode ==
-                                  AppMode.wall
-                              ? Icons
-                                  .add_location_alt_outlined
-                              : _currentMode ==
-                                      AppMode.door
-                                  ? Icons
-                                      .door_front_door
-                                  : Icons.window,
-                        ),
-                        label: Text(
-                          !_isContinuationCalibrated
-                              ? _continuationSessionStart == null
-                                  ? 'Marcar extremo A'
-                                  : 'Marcar extremo B'
-                              : _currentMode ==
-                                  AppMode.wall
-                              ? l10n.addCorner
-                              : _pendingFeatureStart !=
-                                      null
-                                  ? l10n.markSecondEnd
-                                  : _currentMode ==
-                                          AppMode.door
-                                      ? l10n.measureDoor
-                                      : l10n.measureWindow,
-                        ),
-                        style:
-                            ElevatedButton.styleFrom(
-                          padding:
-                              const EdgeInsets
-                                  .symmetric(
-                            vertical: 16,
-                          ),
-                          backgroundColor:
-                              _modeColor(
-                            _currentMode,
-                          ),
-                          foregroundColor:
-                              Colors.white,
-                          shape:
-                              RoundedRectangleBorder(
-                            borderRadius:
-                                BorderRadius.circular(
-                              16,
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: feature.isConnected
+                        ? null
+                        : () => Navigator.pop(
+                              bottomSheetContext,
+                              true,
                             ),
-                          ),
-                        ),
-                      ),
+                    icon: const Icon(Icons.add_road_rounded),
+                    label: Text(
+                      feature.isConnected
+                          ? 'Esta abertura ya conecta dos ambientes'
+                          : 'Continuar escaneo desde aquí',
                     ),
-
-                    const SizedBox(width: 12),
-
-                    IconButton.filled(
-                      onPressed:
-                          provider.currentPointsCount >=
-                                  3
-                              ? () =>
-                                  _onCloseRoomPressed(
-                                    provider,
-                                  )
-                              : null,
-                      icon: const Icon(
-                        Icons.check,
-                      ),
-                      style: IconButton.styleFrom(
-                        backgroundColor:
-                            provider.currentPointsCount >=
-                                    3
-                                ? Colors.green
-                                : Colors.grey,
-                        foregroundColor:
-                            Colors.white,
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ],
             ),
           ),
-        ],
-      ),
+        );
+      },
     );
-  }
 
-  String _localizedRoomName(
-    ScannerProvider provider,
-    AppLocalizations l10n,
-  ) {
-    final room =
-        provider.currentRoom;
+    if (!mounted) return;
 
-    if (room == null) {
-      return l10n.newRoom;
+    if (shouldContinue != true) {
+      return;
     }
 
-    final defaultName =
-        room.type.displayName;
+    final side = await _chooseConnectionSide(feature);
 
-    return room.name == defaultName
-        ? room.type.localizedName(l10n)
-        : room.name;
-  }
-  Future<void> _showCustomRoomNameDialog(
-    ScannerProvider provider,
-  ) async {
-    final l10n =
-        AppLocalizations.of(context)!;
+    if (!mounted || side == null) return;
 
-    final controller =
-        TextEditingController(
-      text: provider.currentRoom?.name ??
-          provider.selectedType.localizedName(l10n),
+    final provider = context.read<FloorPlanProvider>();
+    final reference = provider.createContinuationReference(
+      roomId: selection.roomId,
+      featureId: feature.id,
+      side: side,
+      startEndpoint: ContinuationStartEndpoint.start,
     );
 
-    final name =
-        await showDialog<String>(
-      context: context,
-      builder: (
-        dialogContext,
-      ) {
-        return AlertDialog(
-          title: Text(
-            l10n.roomName,
-          ),
-          content: TextField(
-            controller: controller,
-            autofocus: true,
-            textCapitalization:
-                TextCapitalization.sentences,
-            maxLength: 60,
-            decoration:
-                InputDecoration(
-              labelText:
-                  l10n.roomDestination,
-              hintText:
-                  l10n.roomNameExample,
-              border:
-                  OutlineInputBorder(),
-            ),
-            onSubmitted: (value) {
-              final normalized =
-                  value.trim();
+    final projectUuid = provider.projectUuid;
 
-              if (normalized.isNotEmpty) {
-                Navigator.pop(
-                  dialogContext,
-                  normalized,
-                );
-              }
-            },
+    if (reference == null || projectUuid == null) {
+      _showMessage(
+        'La abertura seleccionada ya no está disponible.',
+        error: true,
+      );
+      return;
+    }
+
+    await ArCheckService.abrirEscanerConValidacion(
+      context,
+      projectUuid: projectUuid,
+      projectName: provider.projectName,
+      continuationReference: reference,
+    );
+  }
+
+  Future<OpeningConnectionSide?> _chooseConnectionSide(
+    WallFeature feature,
+  ) {
+    final start = _transformPoint(feature.start);
+    final end = _transformPoint(feature.end);
+    final openingDirection = end - start;
+    final leftDirection = Offset(
+      -openingDirection.dy,
+      openingDirection.dx,
+    );
+    final rightDirection = -leftDirection;
+
+    return showDialog<OpeningConnectionSide>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('¿Hacia dónde continúa el plano?'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'El punto verde marca dónde comenzará el nuevo ambiente. '
+                'Elegí la flecha que apunta hacia el ambiente que vas a escanear.',
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: 240,
+                height: 120,
+                child: CustomPaint(
+                  painter: _OpeningDirectionPainter(
+                    openingDirection: openingDirection,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () => Navigator.pop(
+                    dialogContext,
+                    OpeningConnectionSide.left,
+                  ),
+                  icon: Icon(_directionIcon(leftDirection)),
+                  label: Text(
+                    'Continuar hacia ${_directionLabel(leftDirection)}',
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: () => Navigator.pop(
+                    dialogContext,
+                    OpeningConnectionSide.right,
+                  ),
+                  icon: Icon(_directionIcon(rightDirection)),
+                  label: Text(
+                    'Continuar hacia ${_directionLabel(rightDirection)}',
+                  ),
+                ),
+              ),
+            ],
           ),
           actions: [
             TextButton(
-              onPressed: () =>
-                  Navigator.pop(
-                dialogContext,
-              ),
-              child: Text(
-                l10n.cancel,
-              ),
-            ),
-            FilledButton(
-              onPressed: () {
-                final normalized =
-                    controller.text.trim();
-
-                if (normalized.isEmpty) {
-                  return;
-                }
-
-                Navigator.pop(
-                  dialogContext,
-                  normalized,
-                );
-              },
-              child: Text(
-                l10n.save,
-              ),
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancelar'),
             ),
           ],
         );
       },
-    );    await Future<void>.delayed(
-      kThemeAnimationDuration,
-    );
-
-    controller.dispose();
-
-    if (!mounted ||
-        name == null ||
-        name.trim().isEmpty) {
-      return;
-    }
-
-    provider.setCurrentRoomName(
-      name,
     );
   }
-  String _continuationInstruction() {
-    if (_continuationSessionStart == null) {
-      return 'Apuntá al extremo A de la abertura y marcá la referencia.';
+
+  String _directionLabel(Offset direction) {
+    if (direction.dx.abs() >= direction.dy.abs()) {
+      return direction.dx >= 0 ? 'la derecha' : 'la izquierda';
     }
 
-    if (_continuationSessionEnd == null) {
-      return 'Ahora apuntá al extremo B de la misma abertura.';
-    }
-
-    return 'Referencia alineada. Ya podés medir el ambiente nuevo.';
+    return direction.dy >= 0 ? 'abajo' : 'arriba';
   }
 
-  Future<void> _captureContinuationEndpoint() async {
-    final position = await _getCurrentCameraPosition();
-
-    if (!mounted) return;
-
-    if (position == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'No se detectó un punto válido. Apuntá a la abertura e intentá nuevamente.',
-          ),
-          backgroundColor: Colors.orange,
-        ),
-      );
-      return;
+  IconData _directionIcon(Offset direction) {
+    if (direction.dx.abs() >= direction.dy.abs()) {
+      return direction.dx >= 0
+          ? Icons.arrow_forward
+          : Icons.arrow_back;
     }
 
-    if (_continuationSessionStart == null) {
-      setState(() {
-        _continuationSessionStart = position;
-      });
-      return;
-    }
+    return direction.dy >= 0
+        ? Icons.arrow_downward
+        : Icons.arrow_upward;
+  }
 
-    final start = _continuationSessionStart!;
-    final dx = position.x - start.x;
-    final dz = position.z - start.z;
-    final measuredWidth = vector.Vector2(dx, dz).length;
-
-    if (measuredWidth < 0.20) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Los extremos están demasiado cerca. Volvé a marcar el extremo B.',
-          ),
-          backgroundColor: Colors.orange,
-        ),
-      );
-      return;
-    }
-
-    setState(() {
-      _continuationSessionEnd = position;
-    });
-
-    final expectedWidth = widget.continuationReference!.width;
-    final difference = (measuredWidth - expectedWidth).abs();
-    final measurementSystem = context
-        .read<MeasurementSettingsProvider>()
-        .system;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          difference > 0.15
-              ? 'Referencia alineada. Atención: la medida de realidad aumentada difiere '
-                  '${_formatLength(difference, measurementSystem)} del plano.'
-              : 'Referencia alineada correctamente.',
-        ),
-        backgroundColor:
-            difference > 0.15 ? Colors.orange : Colors.green,
-      ),
+  double _featureWidth(WallFeature feature) {
+    return GeometryService.calculateDistance(
+      feature.start,
+      feature.end,
     );
   }
 
@@ -930,6 +468,28 @@ class _ARScannerScreenState extends State<ARScannerScreen>
         '${localizations.feet.toLowerCase()} '
         '${_formatDecimal(imperial.inches)} '
         '${localizations.inches.toLowerCase()}';
+  }
+
+  String _formatArea(
+    double squareMeters,
+    MeasurementSystem measurementSystem,
+  ) {
+    final localizations =
+        AppLocalizations.of(context)!;
+
+    if (measurementSystem ==
+        MeasurementSystem.metric) {
+      return '${_formatDecimal(squareMeters)} '
+          '${localizations.squareMeters}';
+    }
+
+    final squareFeet =
+        MeasurementUnits.squareMetersToSquareFeet(
+      squareMeters,
+    );
+
+    return '${_formatDecimal(squareFeet)} '
+        '${localizations.squareFeet}';
   }
 
   String _formatDecimal(
@@ -961,294 +521,947 @@ class _ARScannerScreenState extends State<ARScannerScreen>
     return formatted;
   }
 
-  vector.Vector3 _toContinuationLocal(
-    vector.Vector3 sessionPoint,
-  ) {
-    if (!_requiresContinuationCalibration ||
-        !_isContinuationCalibrated) {
-      return sessionPoint;
+  // ===========================================================================
+  // EDITOR DE MEDIDAS
+  // ===========================================================================
+
+  Future<void>
+      _openMeasurementEditor({
+    String? roomId,
+  }) async {
+    if (!mounted) {
+      return;
     }
 
-    final reference = widget.continuationReference!;
-    final start = _continuationSessionStart!;
-    final end = _continuationSessionEnd!;
-    final sessionOrigin = reference.startEndpoint ==
-            ContinuationStartEndpoint.start
-        ? start
-        : end;
-    final tangent = vector.Vector2(
-      end.x - start.x,
-      end.z - start.z,
-    )..normalize();
-
-    final forward = reference.side == OpeningConnectionSide.left
-        ? vector.Vector2(-tangent.y, tangent.x)
-        : vector.Vector2(tangent.y, -tangent.x);
-    final right = vector.Vector2(forward.y, -forward.x);
-    final relative = vector.Vector2(
-      sessionPoint.x - sessionOrigin.x,
-      sessionPoint.z - sessionOrigin.z,
-    );
-
-    return vector.Vector3(
-      relative.dot(right),
-      sessionPoint.y - sessionOrigin.y,
-      relative.dot(forward),
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) =>
+            MeasurementEditorScreen(
+          roomId: roomId,
+        ),
+      ),
     );
   }
 
-  // ================================================================
-  // SELECTOR DE MODO
-  // ================================================================
+  // ===========================================================================
+  // ORGANIZACIÓN AUTOMÁTICA
+  // ===========================================================================
+  Future<void> _organizeRooms() async {
+    final provider =        context.read<            FloorPlanProvider>();
 
-  Color _modeColor(
-    AppMode mode,
-  ) {
-    switch (mode) {
-      case AppMode.wall:
-        return const Color(
-          0xFF448AFF,
-        );
-
-      case AppMode.door:
-        return const Color(
-          0xFFFF8A00,
-        );
-
-      case AppMode.window:
-        return const Color(
-          0xFFD500F9,
-        );
+    if (provider.completedRooms.length <=
+        1) {
+      _showMessage(
+        'No hay suficientes ambientes para organizar.',
+      );
+      return;
     }
-  }
 
-  Widget _buildModeChip(
-    AppMode mode,
-    IconData icon,
-    String label,
-  ) {
-    final isSelected = _currentMode == mode;
-
-    return ChoiceChip(      avatar: Icon(
-        icon,
-        size: 18,
-        color: isSelected
-            ? Colors.white
-            : Colors.white70,
-      ),
-      label: Text(label),
-      selected: isSelected,
-      selectedColor:
-          _modeColor(mode),
-      backgroundColor: Colors.black87,
-      labelStyle: TextStyle(
-        color: isSelected
-            ? Colors.white
-            : Colors.white70,
-        fontWeight: isSelected
-            ? FontWeight.bold
-            : FontWeight.normal,
-      ),
-      onSelected: (selected) {
-        if (!selected) return;
-
-        HapticFeedback.selectionClick();
-
-        setState(() {
-          _currentMode = mode;
-          _pendingFeatureStart = null;
-          _pendingFeatureMode = null;
-        });
+    final confirmed =
+        await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Row(
+            children: [
+              Icon(
+                Icons.grid_view_rounded,
+              ),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Organizar ambientes',
+                ),
+              ),
+            ],
+          ),
+          content: const Text(
+            'Los ambientes se distribuirán automáticamente '
+            'uno junto a otro, manteniendo intactas sus '
+            'medidas, superficies, puertas y ventanas.\n\n'
+            'Esta operación modifica únicamente su posición '
+            'en el plano general.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(
+                  dialogContext,
+                  false,
+                );
+              },
+              child: const Text(
+                'Cancelar',
+              ),
+            ),
+            FilledButton.icon(
+              onPressed: () {
+                Navigator.pop(
+                  dialogContext,
+                  true,
+                );
+              },
+              icon: const Icon(
+                Icons.auto_awesome,
+              ),
+              label: const Text(
+                'Organizar',
+              ),
+            ),
+          ],
+        );
       },
     );
+
+    if (confirmed != true ||
+        !mounted) {
+      return;
+    }
+
+    await provider.autoArrangeRooms();
+
+    if (!mounted) {
+      return;
+    }
+
+    _showMessage(
+      'Ambientes organizados correctamente.',
+    );
   }
+  // ===========================================================================
+  // BUILD
+  // ===========================================================================
 
-  // ================================================================
-  // CAPTURA DE PUNTOS / ABERTURAS
-  // ================================================================
+  @override  Widget build(
+    BuildContext context,
+  ) {
+    final measurementSystem = context
+        .watch<MeasurementSettingsProvider>()
+        .system;
 
-  Future<void> _onCapturePressed(
-    ScannerProvider provider,
-  ) async {
-    HapticFeedback.lightImpact();
-
-    if (!_isContinuationCalibrated) {
-      await _captureContinuationEndpoint();
-      return;
-    }
-
-    final pos =
-        await _getCurrentCameraPosition();
-
-    if (!mounted) return;
-
-    if (pos == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'No se detectó una posición de cámara válida. '
-            'Apunta a una superficie reconocida e intenta de nuevo.',
-          ),
-          backgroundColor: Colors.orange,
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text(
+          'Plano General 2D',
         ),
-      );
+        centerTitle: true,
+        actions: [
+          IconButton(
+            icon: const Icon(
+              Icons.grid_view_rounded,
+            ),
+            tooltip:
+                'Organizar ambientes',
+            onPressed:
+                _organizeRooms,
+          ),
+          IconButton(
+            icon: const Icon(
+              Icons.straighten_outlined,
+            ),
+            tooltip:
+                'Editar medidas',
+            onPressed: () =>
+                _openMeasurementEditor(),
+          ),
+          PopupMenuButton<
+              _FloorPlanAction>(
+            tooltip: 'Más opciones',
+            onSelected: (action) {
+              switch (action) {
+                case _FloorPlanAction
+                      .importJson:
+                  _importJson();
+                  break;
 
-      return;
-    }
+                case _FloorPlanAction
+                      .shareJson:
+                  _shareJson();
+                  break;
 
-    final resolvedPosition =        _toContinuationLocal(pos);
+                case _FloorPlanAction
+                      .exportPdf:
+                  _exportPdf();
+                  break;
+              }
+            },
+            itemBuilder: (context) {
+              return const [
+                PopupMenuItem(
+                  value:
+                      _FloorPlanAction
+                          .importJson,
+                  child: ListTile(
+                    dense: true,
+                    leading: Icon(
+                      Icons.file_upload,
+                    ),
+                    title: Text(
+                      'Importar plano',
+                    ),
+                  ),
+                ),
+                PopupMenuItem(
+                  value:
+                      _FloorPlanAction
+                          .shareJson,
+                  child: ListTile(
+                    dense: true,
+                    leading: Icon(
+                      Icons.share,
+                    ),
+                    title: Text(
+                      'Compartir JSON',
+                    ),
+                  ),
+                ),
+                PopupMenuItem(
+                  value:
+                      _FloorPlanAction
+                          .exportPdf,
+                  child: ListTile(
+                    dense: true,
+                    leading: Icon(
+                      Icons.picture_as_pdf,
+                    ),
+                    title: Text(
+                      'Exportar PDF',
+                    ),
+                  ),
+                ),
+              ];
+            },
+          ),
+        ],
+      ),
 
-    switch (_currentMode) {
-      case AppMode.wall:
-        _handleWallPoint(provider, resolvedPosition);
-        break;
+      floatingActionButton:
+          FloatingActionButton.extended(
+        tooltip:
+            'Ambientes registrados',
+        onPressed:
+            _showRoomListDialog,
+        icon: const Icon(
+          Icons.meeting_room_outlined,
+        ),
+        label: const Text(
+          'Ambientes',
+        ),
+      ),
 
-      case AppMode.door:
-      case AppMode.window:
-        _handleFeatureInsertion(
+      body: Consumer<
+          FloorPlanProvider>(
+        builder: (
+          context,
           provider,
-          _currentMode,
-          resolvedPosition,
+          child,
+        ) {
+          final rooms =
+              provider.completedRooms;
+
+          if (rooms.isEmpty) {
+            return const _EmptyPlanView();
+          }
+
+          return LayoutBuilder(
+            builder: (
+              context,
+              constraints,
+            ) {
+              final size =
+                  constraints.biggest;
+
+              _calculateTransform(
+                size,
+                rooms,
+              );
+
+              return Stack(
+                children: [
+                  InteractiveViewer(
+                    constrained: true,
+                    boundaryMargin:
+                        const EdgeInsets.all(
+                      200,
+                    ),
+                    minScale: 0.2,
+                    maxScale: 6.0,
+                    child:
+                        GestureDetector(
+                      behavior:
+                          HitTestBehavior
+                              .opaque,
+                      onTapUp: (
+                        details,
+                      ) {
+                        final featureSelection =
+                            _getFeatureAtPosition(
+                          details.localPosition,
+                          rooms,
+                        );
+
+                        if (featureSelection != null) {
+                          _showFeatureMenu(
+                            featureSelection,
+                          );
+                          return;
+                        }
+
+                        final planePoint =
+                            _inverseTransform(
+                          details
+                              .localPosition,
+                        );
+
+                        final roomId =
+                            _getRoomAtPosition(
+                          planePoint,
+                          rooms,
+                        );
+
+                        if (roomId ==
+                            null) {
+                          _showMessage(
+                            'Tocá dentro de un ambiente para '
+                            'añadir una puerta o ventana.',
+                          );
+                          return;
+                        }
+
+                        _showAddFeatureMenu(
+                          roomId:
+                              roomId,
+                          location:
+                              planePoint,
+                        );
+                      },
+                      child:
+                          SizedBox.expand(
+                        child:
+                            CustomPaint(
+                          painter:
+                              FloorPlanPainter(
+                            rooms:
+                                rooms,
+                            transform:
+                                _transformPoint,
+                            selectedRoomId:
+                                _selectedRoomId,
+                            selectedFeatureId:
+                                _selectedFeatureId,
+                            formatArea: (area) =>
+                                _formatArea(
+                              area,
+                              measurementSystem,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  Positioned(
+                    left: 12,
+                    top: 12,
+                    child:
+                        IgnorePointer(
+                      child: Container(
+                        padding:
+                            const EdgeInsets
+                                .symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        decoration:
+                            BoxDecoration(
+                          color: Colors
+                              .black
+                              .withOpacity(
+                            0.72,
+                          ),
+                          borderRadius:
+                              BorderRadius
+                                  .circular(
+                            12,
+                          ),
+                        ),
+                        child: Text(
+                          '${rooms.length} '
+                          '${rooms.length == 1 ? 'ambiente' : 'ambientes'}'
+                          ' · '
+                          '${_formatArea(provider.totalProjectArea, measurementSystem)}',
+                          style:
+                              const TextStyle(
+                            color:
+                                Colors.white,
+                            fontWeight:
+                                FontWeight
+                                    .w600,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // IMPORTAR / EXPORTAR
+  // ===========================================================================
+
+  Future<void> _importJson() async {
+    final provider =
+        context.read<
+            FloorPlanProvider>();
+
+    final success =
+        await ImportExportService
+            .importFromJson(
+      provider,
+    );
+
+    if (!mounted) {
+      return;
+    }
+
+    _showMessage(
+      success
+          ? 'Plano importado correctamente.'
+          : 'Importación cancelada o no válida.',
+      error: !success,
+    );
+  }
+
+  Future<void> _shareJson() async {
+    final provider =
+        context.read<
+            FloorPlanProvider>();
+
+    await ImportExportService
+        .exportToJson(
+      provider.completedRooms,
+      provider.projectName,
+    );
+  }
+
+  Future<void> _exportPdf() async {
+    final provider =
+        context.read<
+            FloorPlanProvider>();
+
+    await ImportExportService
+        .exportToPdf(
+      provider.completedRooms,
+      provider.projectName,
+    );
+  }
+  // ===========================================================================
+  // PUERTAS / VENTANAS
+  // ===========================================================================  Future<void>
+      _showAddFeatureMenu({
+    required String roomId,
+    required ARPoint location,
+  }) async {
+    final selected =
+        await showModalBottomSheet<
+            FeatureType>(
+      context: context,
+      builder: (
+        bottomSheetContext,
+      ) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize:
+                MainAxisSize.min,
+            children: [
+              const ListTile(
+                leading: Icon(
+                  Icons
+                      .add_location_alt,
+                ),
+                title: Text(
+                  'Agregar elemento',
+                ),
+                subtitle: Text(
+                  'Seleccioná el elemento '
+                  'que querés incorporar.',
+                ),
+              ),
+              const Divider(
+                height: 1,
+              ),
+              ListTile(
+                leading:
+                    const Icon(
+                  Icons
+                      .door_front_door,
+                  color:
+                      Colors.red,
+                ),
+                title:
+                    const Text(
+                  'Puerta',
+                ),
+                onTap: () {
+                  Navigator.pop(
+                    bottomSheetContext,
+                    FeatureType.door,
+                  );
+                },
+              ),
+              ListTile(
+                leading:
+                    const Icon(
+                  Icons.window,
+                  color:
+                      Colors.blue,
+                ),
+                title:
+                    const Text(
+                  'Ventana',
+                ),
+                onTap: () {
+                  Navigator.pop(
+                    bottomSheetContext,
+                    FeatureType.window,
+                  );
+                },
+              ),
+              const SizedBox(
+                height: 8,
+              ),
+            ],
+          ),
         );
+      },
+    );
+
+    if (selected == null ||
+        !mounted) {
+      return;
+    }
+
+    final width =
+        selected ==
+                FeatureType.door
+            ? 0.8
+            : 1.0;
+
+    final endPoint = ARPoint(
+      x: location.x + width,
+      y: location.y,
+      z: location.z,
+    );
+
+    await context
+        .read<FloorPlanProvider>()
+        .addFeatureToRoom(
+          roomId,
+          selected,
+          location,
+          endPoint,
+        );
+  }
+
+    Future<void>
+      _showRoomListDialog() async {
+    final action =
+        await showModalBottomSheet<
+            _RoomListAction>(
+      context: context,
+      isScrollControlled: true,
+      builder: (
+        bottomSheetContext,
+      ) {
+        return Consumer<
+            FloorPlanProvider>(
+          builder: (
+            context,
+            provider,
+            child,
+          ) {
+            final rooms =
+                provider.completedRooms;
+            final measurementSystem = context
+                .watch<MeasurementSettingsProvider>()
+                .system;
+
+            return SafeArea(
+              child: Padding(
+                padding:                    const EdgeInsets
+                        .fromLTRB(                  16,
+                  16,
+                  16,
+                  24,
+                ),
+                child: Column(
+                  mainAxisSize:
+                      MainAxisSize.min,
+                  crossAxisAlignment:
+                      CrossAxisAlignment
+                          .start,
+                  children: [
+                    Row(
+                      children: [
+                        const Expanded(
+                          child: Text(
+                            'Ambientes registrados',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight:
+                                  FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: 'Cerrar',
+                          onPressed: () {
+                            Navigator.pop(
+                              bottomSheetContext,
+                            );
+                          },
+                          icon: const Icon(
+                            Icons.close,
+                          ),
+                        ),
+                      ],                    ),
+                    const SizedBox(
+                      height: 8,
+                    ),
+
+                    if (rooms.isEmpty)
+                      const Padding(
+                        padding:
+                            EdgeInsets.symmetric(
+                          vertical: 32,
+                        ),
+                        child: Center(
+                          child: Text(
+                            'No hay ambientes aún.',
+                          ),
+                        ),
+                      )
+                    else
+                      Flexible(
+                        child:
+                            ListView.separated(
+                          shrinkWrap: true,
+                          itemCount:
+                              rooms.length,
+                          separatorBuilder:
+                              (
+                            context,
+                            index,
+                          ) =>
+                                  const Divider(
+                            height: 1,
+                          ),
+                          itemBuilder:
+                              (
+                            context,
+                            index,
+                          ) {
+                            final room =
+                                rooms[index];
+
+                            final area =
+                                GeometryService
+                                    .calculateArea(
+                              room.points,
+                            );
+                            final perimeter =
+                                GeometryService
+                                    .calculatePerimeter(
+                              room.points,
+                            );
+
+                            return ListTile(
+                              contentPadding:
+                                  EdgeInsets.zero,
+                              leading:
+                                  CircleAvatar(
+                                child: Text(
+                                  '${index + 1}',
+                                ),
+                              ),
+                              title: Text(
+                                room.name,
+                              ),
+                              subtitle: Text(
+                                '${_formatArea(area, measurementSystem)} · '
+                                '${_formatLength(perimeter, measurementSystem)} de perímetro'
+                                ' · '
+                                '${room.points.length} esquinas',
+                              ),
+                              trailing:
+                                  PopupMenuButton<
+                                      _RoomListActionType>(
+                                tooltip:
+                                    'Acciones',
+                                onSelected:
+                                    (
+                                  type,
+                                ) {
+                                  Navigator.pop(
+                                    bottomSheetContext,
+                                    _RoomListAction(
+                                      type: type,
+                                      roomId:
+                                          room.id,
+                                    ),
+                                  );
+                                },
+                                itemBuilder:
+                                    (
+                                  context,
+                                ) {
+                                  return const [
+                                    PopupMenuItem(
+                                      value:
+                                          _RoomListActionType
+                                              .editMeasurements,
+                                      child:
+                                          ListTile(
+                                        dense: true,
+                                        leading:
+                                            Icon(
+                                          Icons
+                                              .straighten_outlined,
+                                        ),
+                                        title:
+                                            Text(
+                                          'Editar medidas',
+                                        ),
+                                      ),
+                                    ),
+                                    PopupMenuItem(
+                                      value:
+                                          _RoomListActionType
+                                              .rename,
+                                      child:
+                                          ListTile(
+                                        dense: true,
+                                        leading:
+                                            Icon(
+                                          Icons
+                                              .edit_outlined,
+                                        ),
+                                        title:
+                                            Text(
+                                          'Renombrar',
+                                        ),
+                                      ),
+                                    ),
+                                  ];
+                                },
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+
+                    if (rooms.length >
+                        1) ...[
+                      const SizedBox(
+                        height: 12,
+                      ),
+                      SizedBox(
+                        width:
+                            double.infinity,
+                        child:
+                            OutlinedButton.icon(
+                          onPressed: () {
+                            Navigator.pop(
+                              bottomSheetContext,
+                              const _RoomListAction(
+                                type:
+                                    _RoomListActionType
+                                        .organize,
+                              ),
+                            );
+                          },
+                          icon: const Icon(
+                            Icons
+                                .grid_view_rounded,
+                          ),
+                          label: const Text(
+                            'Organizar ambientes',
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    if (action == null ||
+        !mounted) {
+      return;
+    }
+
+    switch (action.type) {
+      case _RoomListActionType
+            .editMeasurements:
+        await _openMeasurementEditor(
+          roomId:
+              action.roomId,
+        );
+        break;
+
+      case _RoomListActionType
+            .rename:
+        final room =
+            _findRoom(
+          action.roomId,
+        );
+
+        if (room != null) {
+          await _editRoomName(
+            room,
+          );
+        }
+        break;
+
+      case _RoomListActionType
+            .organize:
+        await _organizeRooms();
         break;
     }
   }
 
-  void _handleWallPoint(
-    ScannerProvider provider,
-    vector.Vector3 pos,
+  RoomModel? _findRoom(
+    String? roomId,
   ) {
-    final ValidationResult result =
-        provider.tryAddPoint(
-      pos.x,
-      pos.y,
-      pos.z,
-    );
-
-    if (!result.isValid) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            result.errorMessage ??
-                'Punto inválido.',
-          ),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
-
-      return;
+    if (roomId == null) {
+      return null;
     }
 
-    if (result.warningMessage != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            result.warningMessage!,
-          ),
-          backgroundColor:
-              Colors.amber.shade800,
-          duration:
-              const Duration(seconds: 2),
-        ),
-      );
+    final rooms =
+        context
+            .read<
+                FloorPlanProvider>()
+            .completedRooms;
+
+    for (final room in rooms) {
+      if (room.id ==
+          roomId) {
+        return room;
+      }
     }
+
+    return null;
   }
 
-  void _handleFeatureInsertion(
-    ScannerProvider provider,
-    AppMode mode,
-    vector.Vector3 position,
-  ) {
-    if (provider.currentPointsCount < 2) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Necesitas marcar al menos 2 esquinas '
-            'antes de medir una abertura.',
-          ),
-          backgroundColor: Colors.orange,
-        ),
-      );
+  // ===========================================================================
+  // RENOMBRAR AMBIENTE
+  // ===========================================================================
 
+  Future<void> _editRoomName(
+    RoomModel room,
+  ) async {
+    final controller =
+        TextEditingController(
+      text: room.name,
+    );
+
+    final newName =
+        await showDialog<String>(
+      context: context,
+      builder: (
+        dialogContext,
+      ) {
+        return AlertDialog(
+          title: const Text(
+            'Renombrar ambiente',
+          ),
+          content: TextField(
+            controller:
+                controller,
+            autofocus: true,
+            textCapitalization:
+                TextCapitalization
+                    .sentences,
+            decoration:
+                const InputDecoration(
+              labelText: 'Nombre',
+              hintText:
+                  'Ej. Dormitorio principal',
+              border:
+                  OutlineInputBorder(),
+            ),
+            onSubmitted:
+                (value) {
+              Navigator.pop(
+                dialogContext,
+                value.trim(),
+              );
+            },
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(
+                  dialogContext,
+                );
+              },
+              child: const Text(
+                'Cancelar',
+              ),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.pop(
+                  dialogContext,
+                  controller.text
+                      .trim(),
+                );
+              },
+              child: const Text(
+                'Guardar',
+              ),
+            ),
+          ],
+        );
+      },
+    );
+
+    controller.dispose();
+
+    if (newName == null ||
+        newName.trim().isEmpty ||
+        !mounted) {
       return;
     }
 
-    final currentPoint =
-        ARPoint(
-      x: position.x,
-      y: position.y,
-      z: position.z,
-    );
-
-    final label =
-        mode == AppMode.door
-            ? 'Puerta'
-            : 'Ventana';
-
-    final pendingStart =
-        _pendingFeatureStart;
-
-    if (pendingStart == null ||
-        _pendingFeatureMode !=
-            mode) {
-      setState(() {
-        _pendingFeatureStart =
-            currentPoint;
-        _pendingFeatureMode =
-            mode;
-      });
-
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          SnackBar(
-            content: Text(
-              'Inicio de $label registrado. '
-              'Ubicá la cámara en el otro extremo y volvé a pulsar.',
-            ),
-            duration:
-                const Duration(
-              seconds: 3,
-            ),
-          ),
+    await context
+        .read<FloorPlanProvider>()
+        .updateRoomName(
+          room.id,
+          newName.trim(),
         );
+  }
 
-      return;
-    }
+  // ===========================================================================
+  // MENSAJES
+  // ===========================================================================
 
-    final featureType =
-        mode == AppMode.door
-            ? FeatureType.door
-            : FeatureType.window;
-
-    final result =
-        provider
-            .addFeatureToCurrentRoom(
-      featureType,
-      pendingStart,
-      endLocation:
-          currentPoint,
-    );
-
-    setState(() {
-      _pendingFeatureStart = null;
-      _pendingFeatureMode = null;
-    });
-
-    if (!result.isValid) {
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          SnackBar(
-            content: Text(
-              result.errorMessage ??
-                  'No se pudo medir la abertura.',
-            ),
-            backgroundColor:
-                Colors.redAccent,
-          ),
-        );
-
+  void _showMessage(
+    String message, {
+    bool error = false,
+  }) {
+    if (!mounted) {
       return;
     }
 
@@ -1256,124 +1469,593 @@ class _ARScannerScreenState extends State<ARScannerScreen>
       ..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
+          behavior:
+              SnackBarBehavior.floating,
+          backgroundColor:
+              error
+                  ? Colors.red.shade700
+                  : null,
           content: Text(
-            '$label guardada. '
-            '${result.warningMessage ?? ''}',
-          ),
-          duration:
-              const Duration(
-            seconds: 2,
+            message,
           ),
         ),
       );
   }
+}
+// =============================================================================
+// ACCIONES
+// =============================================================================
+enum _FloorPlanAction {
+  importJson,
+  shareJson,
+  exportPdf,
+}
 
-  // ================================================================
-  // CIERRE Y PERSISTENCIA DE LA HABITACIÓN
-  // ================================================================
+enum _RoomListActionType {
+  editMeasurements,
+  rename,
+  organize,
+}
+class _RoomListAction {
+  final _RoomListActionType type;
 
-  Future<void> _onCloseRoomPressed(
-    ScannerProvider provider,
-  ) async {
-    HapticFeedback.mediumImpact();
+  final String? roomId;
 
-    final continuation = widget.continuationReference;
-    final floorPlanProvider = context.read<FloorPlanProvider>();
+  const _RoomListAction({
+    required this.type,
+    this.roomId,
+  });
+}
 
-    if (continuation != null) {
-      final sourceFeature = floorPlanProvider.findFeature(
-        roomId: continuation.sourceRoomId,
-        featureId: continuation.featureId,
+class _FeatureSelection {
+  final String roomId;
+  final WallFeature feature;
+
+  const _FeatureSelection({
+    required this.roomId,
+    required this.feature,
+  });
+}
+
+class _OpeningDirectionPainter extends CustomPainter {
+  final Offset openingDirection;
+
+  const _OpeningDirectionPainter({
+    required this.openingDirection,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final midpoint = Offset(
+      size.width / 2.0,
+      size.height / 2.0,
+    );
+    final length = openingDirection.distance;
+    final tangent = length <= 0.000001
+        ? const Offset(1, 0)
+        : openingDirection / length;
+    final normal = Offset(-tangent.dy, tangent.dx);
+    final halfOpening = size.shortestSide * 0.42;
+    final arrowLength = size.shortestSide * 0.35;
+    final start = midpoint - tangent * halfOpening;
+    final end = midpoint + tangent * halfOpening;
+
+    final openingPaint = Paint()
+      ..color = const Color(0xFFFF8A00)
+      ..strokeWidth = 7
+      ..strokeCap = StrokeCap.round;
+    final arrowPaint = Paint()
+      ..color = const Color(0xFF00C853)
+      ..strokeWidth = 4
+      ..strokeCap = StrokeCap.round;
+
+    canvas.drawLine(start, end, openingPaint);
+    _drawArrow(
+      canvas,
+      midpoint,
+      midpoint + normal * arrowLength,
+      arrowPaint,
+    );
+    _drawArrow(
+      canvas,
+      midpoint,
+      midpoint - normal * arrowLength,
+      arrowPaint,
+    );
+    canvas.drawCircle(
+      start,
+      9,
+      Paint()..color = const Color(0xFF00C853),
+    );
+    canvas.drawCircle(
+      start,
+      3,
+      Paint()..color = Colors.white,
+    );
+  }
+
+  void _drawArrow(
+    Canvas canvas,
+    Offset start,
+    Offset end,
+    Paint paint,
+  ) {
+    canvas.drawLine(start, end, paint);
+    final delta = end - start;
+    final length = delta.distance;
+
+    if (length <= 0.000001) {
+      return;
+    }
+
+    final direction = delta / length;
+    final perpendicular = Offset(-direction.dy, direction.dx);
+    canvas.drawLine(
+      end,
+      end - direction * 10 + perpendicular * 8,
+      paint,
+    );
+    canvas.drawLine(
+      end,
+      end - direction * 10 - perpendicular * 8,
+      paint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(
+    covariant _OpeningDirectionPainter oldDelegate,
+  ) => false;
+}
+
+class _EmptyPlanView extends StatelessWidget {
+  const _EmptyPlanView();
+
+  @override
+  Widget build(
+    BuildContext context,
+  ) {
+    return const Center(
+      child: Padding(
+        padding: EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize:
+              MainAxisSize.min,
+          children: [
+            Icon(
+              Icons
+                  .architecture_outlined,
+              size: 72,
+              color: Colors.black38,
+            ),
+            SizedBox(
+              height: 16,
+            ),
+            Text(
+              'No hay ambientes escaneados',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight:
+                    FontWeight.bold,
+              ),
+            ),
+            SizedBox(
+              height: 8,
+            ),
+            Text(
+              'Completá un escaneo para visualizar '              'el plano general.',
+              textAlign:
+                  TextAlign.center,              style: TextStyle(
+                color: Colors.black54,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// PAINTER// =============================================================================
+class FloorPlanPainter
+    extends CustomPainter {
+  final List<RoomModel> rooms;
+
+  final Offset Function(
+    ARPoint,
+  ) transform;
+
+  final String? selectedRoomId;
+  final String? selectedFeatureId;
+  final String Function(double)
+      formatArea;
+
+  const FloorPlanPainter({
+    required this.rooms,
+    required this.transform,
+    required this.formatArea,
+    this.selectedRoomId,
+    this.selectedFeatureId,
+  });
+
+  @override
+  void paint(
+    Canvas canvas,
+    Size size,
+  ) {
+    if (rooms.isEmpty) {
+      return;
+    }
+
+    final wallPaint =
+        Paint()
+          ..color =
+              const Color(
+            0xFF448AFF,
+          )
+          ..strokeWidth = 3.0
+          ..style =
+              PaintingStyle.stroke
+          ..strokeJoin =
+              StrokeJoin.round
+          ..strokeCap =
+              StrokeCap.round;
+
+    final roomFill =
+        Paint()
+          ..color =
+              const Color(
+            0xFF448AFF,
+          ).withOpacity(
+            0.10,
+          )
+          ..style =
+              PaintingStyle.fill;
+
+    final pointPaint =
+        Paint()
+          ..color =
+              const Color(
+            0xFF448AFF,
+          )
+          ..style =
+              PaintingStyle.fill;
+
+    final doorPaint =
+        Paint()
+          ..color =
+              const Color(
+            0xFFFF8A00,
+          )
+          ..strokeWidth = 5.0
+          ..style =
+              PaintingStyle.stroke
+          ..strokeCap =
+              StrokeCap.square;
+
+    final windowPaint =
+        Paint()
+          ..color =
+              const Color(
+            0xFFD500F9,
+          )
+          ..strokeWidth = 5.0
+          ..style =
+              PaintingStyle.stroke
+          ..strokeCap =
+              StrokeCap.square;
+
+    final selectedPaint = Paint()
+      ..color = const Color(0xFF00C853)
+      ..strokeWidth = 11.0
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+
+    final referencePaint = Paint()
+      ..color = const Color(0xFF00C853)
+      ..style = PaintingStyle.fill;
+
+    for (final room in rooms) {
+      _drawRoom(
+        canvas,
+        room,
+        wallPaint,
+        roomFill,
+        pointPaint,
       );
 
-      if (sourceFeature == null || sourceFeature.isConnected) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              sourceFeature == null
-                  ? 'La abertura de referencia ya no existe.'
-                  : 'La abertura ya conecta otro ambiente.',
+      _drawRoomLabel(
+        canvas,
+        room,
+      );
+
+      _drawFeatures(
+        canvas,
+        room,
+        doorPaint,
+        windowPaint,
+        selectedPaint,
+        referencePaint,
+      );
+    }
+  }
+
+  // ===========================================================================
+  // HABITACIÓN
+  // ===========================================================================
+
+  void _drawRoom(
+    Canvas canvas,
+    RoomModel room,
+    Paint wallPaint,
+    Paint roomFill,
+    Paint pointPaint,
+  ) {
+    if (room.points.length < 2) {
+      return;
+    }
+
+    final path = Path();
+
+    final start =
+        transform(
+      room.points.first,
+    );
+
+    path.moveTo(
+      start.dx,
+      start.dy,
+    );
+
+    for (
+      int i = 1;
+      i < room.points.length;
+      i++
+    ) {
+      final next =
+          transform(
+        room.points[i],
+      );
+
+      path.lineTo(
+        next.dx,
+        next.dy,
+      );
+    }
+
+    if (room.isClosed ||
+        room.points.length >= 3) {
+      path.close();
+    }
+
+    if (room.points.length >= 3) {
+      canvas.drawPath(
+        path,
+        roomFill,
+      );
+    }
+
+    canvas.drawPath(
+      path,
+      wallPaint,
+    );
+
+    for (final point
+        in room.points) {
+      canvas.drawCircle(
+        transform(point),
+        4.0,
+        pointPaint,
+      );
+    }
+  }
+
+  // ===========================================================================
+  // NOMBRE Y SUPERFICIE
+  // ===========================================================================
+
+  void _drawRoomLabel(
+    Canvas canvas,
+    RoomModel room,
+  ) {
+    if (room.points.isEmpty) {
+      return;
+    }
+
+    double x = 0.0;
+    double y = 0.0;
+
+    for (final point
+        in room.points) {
+      final transformed =
+          transform(point);
+
+      x += transformed.dx;
+      y += transformed.dy;
+    }
+
+    final center = Offset(
+      x / room.points.length,
+      y / room.points.length,
+    );
+
+    final area =
+        GeometryService
+            .calculateArea(
+      room.points,
+    );
+
+    final textPainter =
+        TextPainter(
+      text: TextSpan(
+        children: [
+          TextSpan(
+            text: room.name,
+            style:
+                const TextStyle(
+              color:
+                  Colors.black87,
+              fontSize: 13,
+              fontWeight:
+                  FontWeight.bold,
             ),
-            backgroundColor: Colors.redAccent,
           ),
+          TextSpan(
+            text:
+                '\n${formatArea(area)}',
+            style:
+                const TextStyle(
+              color:
+                  Colors.black54,
+              fontSize: 10,
+              fontWeight:
+                  FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+      textAlign:
+          TextAlign.center,
+      textDirection:
+          TextDirection.ltr,
+      maxLines: 2,
+    )..layout(
+        maxWidth: 140,
+      );
+
+    final backgroundRect =
+        Rect.fromCenter(
+      center: center,
+      width:
+          textPainter.width + 14,
+      height:
+          textPainter.height + 10,
+    );
+
+    final backgroundPaint =
+        Paint()
+          ..color = Colors.white
+              .withOpacity(
+            0.86,
+          )
+          ..style =
+              PaintingStyle.fill;
+
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        backgroundRect,
+        const Radius.circular(
+          7,
+        ),
+      ),
+      backgroundPaint,
+    );
+
+    textPainter.paint(
+      canvas,
+      Offset(
+        center.dx -
+            textPainter.width / 2,
+        center.dy -
+            textPainter.height / 2,
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // PUERTAS Y VENTANAS
+  // ===========================================================================
+
+  void _drawFeatures(
+    Canvas canvas,
+    RoomModel room,
+    Paint doorPaint,
+    Paint windowPaint,
+    Paint selectedPaint,
+    Paint referencePaint,
+  ) {
+    for (final feature
+        in room.features) {
+      final start =
+          transform(
+        feature.start,
+      );
+
+      final end =
+          transform(
+        feature.end,
+      );
+
+      final isSelected =
+          room.id == selectedRoomId &&
+              feature.id == selectedFeatureId;
+
+      if (isSelected) {
+        canvas.drawLine(
+          start,
+          end,
+          selectedPaint,
         );
-        return;
+      }
+
+      switch (feature.type) {
+        case FeatureType.door:
+          canvas.drawLine(
+            start,
+            end,
+            doorPaint,
+          );
+          break;
+
+        case FeatureType.window:
+          canvas.drawLine(
+            start,
+            end,
+            windowPaint,
+          );
+          break;
+      }
+
+      if (!feature.isConnected) {
+        _drawContinuationPoint(
+          canvas,
+          start,
+          referencePaint,
+          selected: isSelected,
+        );
       }
     }
-
-    final closedRoom =
-        provider.closeCurrentRoom();
-
-    if (!mounted) return;
-
-    if (closedRoom == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            provider.lastCloseError ??
-                'No se pudo cerrar la habitación. '
-                'Revisa los puntos trazados.',
-          ),
-          backgroundColor:
-              Colors.redAccent,
-        ),
-      );
-
-      return;
-    }
-
-    final saved = continuation == null
-        ? true
-        : await floorPlanProvider.addCompletedRoomFromContinuation(
-            room: closedRoom,
-            reference: continuation,
-          );
-
-    if (continuation == null) {
-      await floorPlanProvider.addCompletedRoom(closedRoom);
-    }
-
-    if (!saved) {
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'No se pudo conectar el ambiente con la abertura seleccionada.',
-          ),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
-      return;
-    }
-
-    if (!mounted) return;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          continuation == null
-              ? '¡Ambiente guardado correctamente!'
-              : '¡Ambiente conectado y alineado correctamente!',
-        ),
-        backgroundColor: Colors.green,
-      ),
-    );
-
-    Navigator.pop(context);
   }
 
-  // ================================================================
-  // PLANO
-  // ================================================================
-
-  void _openFloorPlan() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) =>
-            const FloorPlanViewerScreen(),
-      ),
+  void _drawContinuationPoint(
+    Canvas canvas,
+    Offset point,
+    Paint referencePaint, {
+    required bool selected,
+  }) {
+    canvas.drawCircle(
+      point,
+      selected ? 10 : 8,
+      referencePaint,
     );
+
+    canvas.drawCircle(
+      point,
+      selected ? 4 : 3,
+      Paint()..color = Colors.white,
+    );
+  }
+
+  // ===========================================================================
+  // REPAINT
+  // ===========================================================================
+
+  @override
+  bool shouldRepaint(
+    covariant FloorPlanPainter
+        oldDelegate,
+  ) {
+    return true;
   }
 }
