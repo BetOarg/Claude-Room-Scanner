@@ -5,16 +5,27 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import '../models/room_model.dart';
 import '../providers/floor_plan_provider.dart';
+import 'geometry_service.dart';
+import '../utils/measurement_units.dart';
 
 class ImportExportService {
   /// Exporta el proyecto a un archivo JSON y abre el menú para compartir
   static Future<void> exportToJson(List<RoomModel> rooms, String projectName) async {
-    final data = {
+    final data = buildJsonData(rooms, projectName);
+    final jsonString = jsonEncode(data);
+    await Share.share(jsonString, subject: '$projectName - Plano 2D');
+  }
+
+  static Map<String, dynamic> buildJsonData(
+    List<RoomModel> rooms,
+    String projectName,
+  ) {
+    return {
+      'formatVersion': 2,
+      'lengthUnit': 'meters',
       'projectName': projectName,
       'rooms': rooms.map((r) => r.toJson()).toList(),
     };
-    final jsonString = jsonEncode(data);
-    await Share.share(jsonString, subject: '$projectName - Plano 2D');
   }
 
   /// Importa un archivo JSON seleccionado desde el dispositivo
@@ -42,27 +53,149 @@ class ImportExportService {
     return false;
   }
 
-  /// Genera un PDF básico del plano y abre la vista previa/impresión
-  static Future<void> exportToPdf(List<RoomModel> rooms, String projectName) async {
+  /// Genera un informe técnico del plano y abre la vista previa/impresión.
+  static Future<void> exportToPdf(
+    List<RoomModel> rooms,
+    String projectName,
+    MeasurementSystem measurementSystem,
+  ) async {
     final pdf = pw.Document();
 
     pdf.addPage(
-      pw.Page(
+      pw.MultiPage(
+        margin: const pw.EdgeInsets.all(32),
         build: (pw.Context context) {
-          return pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start, // <-- Corregido para el paquete pdf
-            children: [
-              pw.Header(level: 0, child: pw.Text('Plano Arquitectónico: $projectName')),
-              pw.SizedBox(height: 20),
-              pw.Text('Resumen de Ambientes:'),
-              pw.SizedBox(height: 10),
-              ...rooms.map((room) => pw.Bullet(text: '${room.name}: ${room.points.length} vértices')),
-            ],
-          );
+          return [
+            pw.Header(
+              level: 0,
+              child: pw.Text('Plano arquitectónico: $projectName'),
+            ),
+            pw.Text(
+              'Ambientes relevados: ${rooms.length}',
+              style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+            ),
+            pw.SizedBox(height: 16),
+            ...rooms.map(
+              (room) => _buildRoomReport(
+                room,
+                measurementSystem,
+              ),
+            ),
+          ];
         },
       ),
     );
 
     await Printing.layoutPdf(onLayout: (format) async => pdf.save());
+  }
+
+  static pw.Widget _buildRoomReport(
+    RoomModel room,
+    MeasurementSystem measurementSystem,
+  ) {
+    final area = GeometryService.calculateArea(room.points);
+    final perimeter = GeometryService.calculatePerimeter(room.points);
+
+    return pw.Container(
+      margin: const pw.EdgeInsets.only(bottom: 18),
+      padding: const pw.EdgeInsets.all(12),
+      decoration: pw.BoxDecoration(
+        border: pw.Border.all(width: 0.6),
+      ),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Text(
+            '${room.name} · ${room.type.displayName}',
+            style: pw.TextStyle(
+              fontSize: 14,
+              fontWeight: pw.FontWeight.bold,
+            ),
+          ),
+          pw.SizedBox(height: 5),
+          pw.Text(
+            'Superficie: ${_formatArea(area, measurementSystem)} · '
+            'Perímetro: ${_formatLength(perimeter, measurementSystem)}',
+          ),
+          pw.Text('Esquinas registradas: ${room.points.length}'),
+          pw.SizedBox(height: 8),
+          pw.Text(
+            'Puertas y ventanas',
+            style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+          ),
+          if (room.features.isEmpty)
+            pw.Text('No hay aberturas registradas.')
+          else
+            ...room.features.map(
+              (feature) => pw.Bullet(
+                text: _featureDescription(
+                  feature,
+                  measurementSystem,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  static String _featureDescription(
+    WallFeature feature,
+    MeasurementSystem measurementSystem,
+  ) {
+    final width = GeometryService.calculateDistance(
+      feature.start,
+      feature.end,
+    );
+    final type = feature.type == FeatureType.door
+        ? 'Puerta'
+        : 'Ventana';
+    final parts = <String>[
+      '$type: ${_formatLength(width, measurementSystem)} de ancho',
+      '${_formatLength(feature.openingHeightMeters, measurementSystem)} de alto',
+    ];
+
+    if (feature.type == FeatureType.window) {
+      parts.add(
+        '${_formatLength(feature.sillHeightMeters, measurementSystem)} '
+        'desde el piso',
+      );
+      parts.add(
+        width >= feature.openingHeightMeters
+            ? 'orientación horizontal'
+            : 'orientación vertical',
+      );
+    }
+
+    return parts.join(' · ');
+  }
+
+  static String _formatLength(
+    double meters,
+    MeasurementSystem measurementSystem,
+  ) {
+    return MeasurementUnits.formatLength(
+      meters,
+      measurementSystem,
+      metersLabel: 'metros',
+      feetLabel: 'pies',
+      inchesLabel: 'pulgadas',
+      decimalSeparator: ',',
+    );
+  }
+
+  static String _formatArea(
+    double squareMeters,
+    MeasurementSystem measurementSystem,
+  ) {
+    if (measurementSystem == MeasurementSystem.metric) {
+      return '${squareMeters.toStringAsFixed(2).replaceAll('.', ',')} '
+          'metros cuadrados';
+    }
+
+    final squareFeet =
+        MeasurementUnits.squareMetersToSquareFeet(squareMeters);
+    return '${squareFeet.toStringAsFixed(2).replaceAll('.', ',')} '
+        'pies cuadrados';
   }
 }
