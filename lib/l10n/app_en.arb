@@ -130,5 +130,7 @@
   "feet": "Feet",
   "inches": "Inches",
   "squareMeters": "square meters",
-  "squareFeet": "square feet"
+  "squareFeet": "square feet",
+  "changeDoorHingeSide": "Change hinge side",
+  "changeDoorOpeningDirection": "Change opening direction"
 }
