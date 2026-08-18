@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../models/room_model.dart';
+import '../l10n/generated/app_localizations.dart';
 import '../providers/floor_plan_provider.dart';
+import '../providers/measurement_settings_provider.dart';
+import '../utils/measurement_units.dart';
 
 class MeasurementEditorScreen extends StatefulWidget {
   final String? roomId;
@@ -291,6 +294,10 @@ class _MeasurementEditorScreenState
     double area,
     double perimeter,
   ) {
+    final measurementSystem = context
+        .watch<MeasurementSettingsProvider>()
+        .system;
+
     return Card(
       elevation: 0,
       child: Padding(
@@ -303,7 +310,10 @@ class _MeasurementEditorScreenState
               child: _metric(
                 Icons.square_foot,
                 'Superficie',
-                '${area.toStringAsFixed(2)} m²',
+                _formatArea(
+                  area,
+                  measurementSystem,
+                ),
               ),
             ),
             Container(
@@ -316,7 +326,10 @@ class _MeasurementEditorScreenState
               child: _metric(
                 Icons.timeline,
                 'Perímetro',
-                '${perimeter.toStringAsFixed(2)} m',
+                _formatLength(
+                  perimeter,
+                  measurementSystem,
+                ),
               ),
             ),
             Container(
@@ -389,6 +402,9 @@ class _MeasurementEditorScreenState
     int roomIndex,
     int wallIndex,
   ) {
+    final measurementSystem = context
+        .watch<MeasurementSettingsProvider>()
+        .system;
     final length =
         provider.wallLength(
       room,
@@ -429,40 +445,23 @@ class _MeasurementEditorScreenState
         ),
         subtitle: Text(
           'Esquina $startIndex → '
-          'Esquina $endIndex',
+          'Esquina $endIndex\n'
+          '${_formatLength(length, measurementSystem)}',
         ),
-        trailing: Row(
-          mainAxisSize:
-              MainAxisSize.min,
-          children: [
-            Text(
-              '${length.toStringAsFixed(2)} m',
-              style:
-                  const TextStyle(
-                fontWeight:
-                    FontWeight.bold,
-                fontSize: 15,
-              ),
-            ),
-            const SizedBox(
-              width: 4,
-            ),
-            IconButton(
-              tooltip:
-                  'Editar medida',
-              icon: const Icon(
-                Icons.edit_outlined,
-              ),
-              onPressed: () =>
-                  _editWallLength(
-                room,
-                provider,
-                roomIndex,
-                wallIndex,
-                length,
-              ),
-            ),
-          ],
+        trailing: IconButton(
+          tooltip:
+              'Editar medida',
+          icon: const Icon(
+            Icons.edit_outlined,
+          ),
+          onPressed: () =>
+              _editWallLength(
+            room,
+            provider,
+            roomIndex,
+            wallIndex,
+            length,
+          ),
         ),
       ),
     );
@@ -479,11 +478,28 @@ class _MeasurementEditorScreenState
     int wallIndex,
     double currentLength,
   ) async {
-    final controller =
+    final measurementSystem = context
+        .read<MeasurementSettingsProvider>()
+        .system;
+    final metricController =
         TextEditingController(
-      text:
-          currentLength
-              .toStringAsFixed(2),
+      text: _formatDecimal(
+        currentLength,
+      ),
+    );
+    final imperialLength =
+        MeasurementUnits.metersToFeetAndInches(
+      currentLength,
+    );
+    final feetController =
+        TextEditingController(
+      text: '${imperialLength.feet}',
+    );
+    final inchesController =
+        TextEditingController(
+      text: _formatDecimal(
+        imperialLength.inches,
+      ),
     );
 
     String? error;
@@ -516,7 +532,7 @@ class _MeasurementEditorScreenState
                   children: [
                     Text(
                       'Medida actual: '
-                      '${currentLength.toStringAsFixed(2)} m',
+                      '${_formatLength(currentLength, measurementSystem)}',
                       style:
                           const TextStyle(
                         color:
@@ -526,49 +542,130 @@ class _MeasurementEditorScreenState
                     const SizedBox(
                       height: 16,
                     ),
-                    TextField(
-                      controller:
-                          controller,
-                      autofocus: true,
-                      keyboardType:
-                          const TextInputType
-                              .numberWithOptions(
-                        decimal: true,
-                      ),
-                      decoration:
-                          InputDecoration(
-                        labelText:
-                            'Nueva longitud',
-                        hintText:
-                            'Ejemplo: 3,25',
-                        suffixText:
-                            'm',
-                        errorText:
-                            error,
-                        prefixIcon:
-                            const Icon(
-                          Icons.straighten,
+                    if (measurementSystem ==
+                        MeasurementSystem.metric)
+                      TextField(
+                        controller:
+                            metricController,
+                        autofocus: true,                        keyboardType:
+                            const TextInputType
+                                .numberWithOptions(
+                          decimal: true,
                         ),
-                        border:
-                            const OutlineInputBorder(),
+                        decoration:
+                            InputDecoration(
+                          labelText:
+                              'Nueva longitud',
+                          hintText:
+                              'Ejemplo: 3,25',
+                          suffixText:
+                              AppLocalizations.of(context)!
+                                  .meters,
+                          errorText:
+                              error,
+                          prefixIcon:
+                              const Icon(
+                            Icons.straighten,
+                          ),
+                          border:
+                              const OutlineInputBorder(),
+                        ),
+                        onSubmitted:
+                            (_) {
+                          _validateAndCloseDialog(
+                            dialogContext:
+                                dialogContext,
+                            measurementSystem:
+                                measurementSystem,
+                            metricController:
+                                metricController,
+                            feetController:
+                                feetController,
+                            inchesController:
+                                inchesController,
+                            setDialogState:
+                                setDialogState,
+                            setError:
+                                (message) {
+                              error =
+                                  message;
+                            },
+                          );
+                        },
+                      )
+                    else
+                      Row(
+                        crossAxisAlignment:
+                            CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller:
+                                  feetController,
+                              autofocus: true,
+                              keyboardType:
+                                  const TextInputType
+                                      .numberWithOptions(
+                                decimal: true,
+                              ),
+                              decoration:
+                                  InputDecoration(
+                                labelText:
+                                    AppLocalizations.of(context)!
+                                        .feet,
+                                errorText:
+                                    error,
+                                border:
+                                    const OutlineInputBorder(),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(
+                            width: 12,
+                          ),
+                          Expanded(
+                            child: TextField(
+                              controller:
+                                  inchesController,
+                              keyboardType:
+                                  const TextInputType
+                                      .numberWithOptions(
+                                decimal: true,
+                              ),
+                              decoration:
+                                  InputDecoration(
+                                labelText:
+                                    AppLocalizations.of(context)!
+                                        .inches,
+                                border:
+                                    const OutlineInputBorder(),
+                              ),
+                              onSubmitted:
+                                  (_) {
+                                _validateAndCloseDialog(
+                                  dialogContext:
+                                      dialogContext,
+                                  measurementSystem:
+                                      measurementSystem,
+                                  metricController:
+                                      metricController,
+                                  feetController:
+                                      feetController,
+                                  inchesController:
+                                      inchesController,
+                                  setDialogState:
+                                      setDialogState,
+                                  setError:
+                                      (message) {
+                                    error =
+                                        message;
+                                  },
+                                );
+                              },
+                            ),
+                          ),
+                        ],
                       ),
-                      onSubmitted:
-                          (_) {
-                        _validateAndCloseDialog(
-                          dialogContext:
-                              dialogContext,
-                          controller:
-                              controller,
-                          setDialogState:
-                              setDialogState,
-                          setError:
-                              (message) {
-                            error =
-                                message;
-                          },
-                        );
-                      },
-                    ),
                     const SizedBox(
                       height: 12,
                     ),
@@ -603,8 +700,14 @@ class _MeasurementEditorScreenState
                     _validateAndCloseDialog(
                       dialogContext:
                           dialogContext,
-                      controller:
-                          controller,
+                      measurementSystem:
+                          measurementSystem,
+                      metricController:
+                          metricController,
+                      feetController:
+                          feetController,
+                      inchesController:
+                          inchesController,
                       setDialogState:
                           setDialogState,
                       setError:
@@ -627,6 +730,10 @@ class _MeasurementEditorScreenState
         );
       },
     );
+
+    metricController.dispose();
+    feetController.dispose();
+    inchesController.dispose();
 
     if (newLength == null ||
         !mounted) {
@@ -678,15 +785,25 @@ class _MeasurementEditorScreenState
 
   void _validateAndCloseDialog({
     required BuildContext dialogContext,
-    required TextEditingController controller,
+    required MeasurementSystem measurementSystem,
+    required TextEditingController metricController,
+    required TextEditingController feetController,
+    required TextEditingController inchesController,
     required StateSetter setDialogState,
     required void Function(String?)
         setError,
   }) {
-    final value =
-        _parseNumber(
-      controller.text,
-    );
+    final value = measurementSystem ==
+            MeasurementSystem.metric
+        ? MeasurementUnits.metricInputToMeters(
+            metricController.text,
+          )
+        : MeasurementUnits.imperialInputToMeters(
+            feetInput:
+                feetController.text,
+            inchesInput:
+                inchesController.text,
+          );
 
     if (value == null) {
       setDialogState(() {
@@ -773,51 +890,86 @@ class _MeasurementEditorScreenState
   }
 
   // ===========================================================================
-  // PARSEO
+  // PRESENTACIÓN DE UNIDADES
   // ===========================================================================
 
-  double? _parseNumber(
-    String value,
+  String _formatLength(
+    double meters,
+    MeasurementSystem measurementSystem,
   ) {
-    var normalized =
-        value.trim().toLowerCase();
+    final localizations =
+        AppLocalizations.of(context)!;
 
-    normalized =
-        normalized.replaceAll(
-      'metros',
-      '',
+    if (measurementSystem ==
+        MeasurementSystem.metric) {
+      return '${_formatDecimal(meters)} '
+          '${localizations.meters}';
+    }
+
+    final imperial =
+        MeasurementUnits.metersToFeetAndInches(
+      meters,
     );
 
-    normalized =
-        normalized.replaceAll(
-      'metro',
-      '',
+    return '${imperial.feet} '
+        '${localizations.feet.toLowerCase()} '
+        '${_formatDecimal(imperial.inches)} '
+        '${localizations.inches.toLowerCase()}';
+  }
+
+  String _formatArea(
+    double squareMeters,
+    MeasurementSystem measurementSystem,
+  ) {
+    final localizations =
+        AppLocalizations.of(context)!;
+
+    if (measurementSystem ==
+        MeasurementSystem.metric) {
+      return '${_formatDecimal(squareMeters)} '
+          '${localizations.squareMeters}';
+    }
+
+    final squareFeet =
+        MeasurementUnits.squareMetersToSquareFeet(
+      squareMeters,
     );
 
-    normalized =
-        normalized.replaceAll(
-      'm²',
-      '',
-    );
+    return '${_formatDecimal(squareFeet)} '
+        '${localizations.squareFeet}';
+  }
 
-    normalized =
-        normalized.replaceAll(
-      'm',
-      '',
-    );
+  String _formatDecimal(
+    double value,
+  ) {
+    var formatted =
+        value.toStringAsFixed(2);
 
-    normalized =
-        normalized.replaceAll(
-      ',',
-      '.',
-    );
+    while (formatted.contains('.') &&
+        formatted.endsWith('0')) {
+      formatted = formatted.substring(
+        0,
+        formatted.length - 1,
+      );
+    }
 
-    normalized =
-        normalized.trim();
+    if (formatted.endsWith('.')) {
+      formatted = formatted.substring(
+        0,
+        formatted.length - 1,
+      );
+    }
 
-    return double.tryParse(
-      normalized,
-    );
+    if (Localizations.localeOf(context)
+            .languageCode ==
+        'es') {
+      formatted = formatted.replaceAll(
+        '.',
+        ',',
+      );
+    }
+
+    return formatted;
   }
 
   // ===========================================================================
