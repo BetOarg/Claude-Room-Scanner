@@ -61,6 +61,18 @@ enum FeatureType {
   window,
 }
 
+/// Extremo de la puerta en el que se ubica la bisagra.
+enum DoorHingeSide {
+  start,
+  end,
+}
+
+/// Lado hacia el que gira la hoja respecto de start → end.
+enum DoorSwingSide {
+  left,
+  right,
+}
+
 /// Lado de la abertura en el que se encuentra el ambiente por escanear.
 ///
 /// Se interpreta observando la abertura desde [WallFeature.start] hacia
@@ -130,6 +142,8 @@ class WallFeature {
   final ARPoint end;
   final String? connectedRoomId;
   final OpeningConnectionSide? connectionSide;
+  final DoorHingeSide doorHingeSide;
+  final DoorSwingSide doorSwingSide;
 
   WallFeature({
     required this.id,
@@ -138,6 +152,8 @@ class WallFeature {
     required this.end,
     this.connectedRoomId,
     this.connectionSide,
+    this.doorHingeSide = DoorHingeSide.start,
+    this.doorSwingSide = DoorSwingSide.left,
   });
 
   bool get isConnected =>
@@ -150,6 +166,8 @@ class WallFeature {
     ARPoint? end,
     String? connectedRoomId,
     OpeningConnectionSide? connectionSide,
+    DoorHingeSide? doorHingeSide,
+    DoorSwingSide? doorSwingSide,
   }) {
     return WallFeature(
       id: id ?? this.id,
@@ -158,6 +176,8 @@ class WallFeature {
       end: end ?? this.end,
       connectedRoomId: connectedRoomId ?? this.connectedRoomId,
       connectionSide: connectionSide ?? this.connectionSide,
+      doorHingeSide: doorHingeSide ?? this.doorHingeSide,
+      doorSwingSide: doorSwingSide ?? this.doorSwingSide,
     );
   }
 
@@ -171,6 +191,8 @@ class WallFeature {
         'connectedRoomId': connectedRoomId,
       if (connectionSide != null)
         'connectionSide': connectionSide!.name,
+      'doorHingeSide': doorHingeSide.name,
+      'doorSwingSide': doorSwingSide.name,
     };
   }
 
@@ -178,6 +200,8 @@ class WallFeature {
     Map<String, dynamic> json,
   ) {
     final sideName = json['connectionSide'] as String?;
+    final hingeName = json['doorHingeSide'] as String?;
+    final swingName = json['doorSwingSide'] as String?;
 
     OpeningConnectionSide? side;
 
@@ -203,6 +227,14 @@ class WallFeature {
       ),
       connectedRoomId: json['connectedRoomId'] as String?,
       connectionSide: side,
+      doorHingeSide: DoorHingeSide.values.firstWhere(
+        (candidate) => candidate.name == hingeName,
+        orElse: () => DoorHingeSide.start,
+      ),
+      doorSwingSide: DoorSwingSide.values.firstWhere(
+        (candidate) => candidate.name == swingName,
+        orElse: () => DoorSwingSide.left,
+      ),
     );
   }
 }
