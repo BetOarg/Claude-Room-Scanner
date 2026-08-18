@@ -20,6 +20,8 @@ class MeasurementUnits {
   static const double inchesPerFoot = 12.0;
   static const double metersPerFoot =
       metersPerInch * inchesPerFoot;
+  static const double squareFeetPerSquareMeter =
+      10.763910416709722;
 
   static double inchesToMeters(
     double inches,
@@ -31,6 +33,13 @@ class MeasurementUnits {
     double meters,
   ) {
     return meters / metersPerInch;
+  }
+
+  static double squareMetersToSquareFeet(
+    double squareMeters,
+  ) {
+    return squareMeters *
+        squareFeetPerSquareMeter;
   }
 
   static double feetAndInchesToMeters({
