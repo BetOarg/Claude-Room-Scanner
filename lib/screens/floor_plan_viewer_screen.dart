@@ -597,8 +597,7 @@ class _FloorPlanViewerScreenState
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(                      '${localizations.wallLength}: '
-                      '${_formatLength(placement.wallLengthMeters, measurementSystem)}',
+                    Text(                      '${localizations.wallLength}: '                      '${_formatLength(placement.wallLengthMeters, measurementSystem)}',
                     ),
                     const SizedBox(height: 16),
                     lengthFields(
@@ -659,7 +658,146 @@ class _FloorPlanViewerScreenState
                     );
                     final height = readLength(
                       metric: heightMetricController,
-                                 ],
+                      feet: heightFeetController,
+                      inches: heightInchesController,
+                    );
+                    final sill = selection.feature.type ==
+                            FeatureType.window
+                        ? readLength(
+                            metric: sillMetricController,
+                            feet: sillFeetController,
+                            inches: sillInchesController,
+                          )
+                        : 0.0;
+
+                    if (width == null ||
+                        position == null ||
+                        height == null ||
+                        sill == null) {
+                      setDialogState(() {
+                        validationMessage =
+                            localizations.invalidOpeningMeasurement;
+                      });
+                      return;
+                    }
+
+                    Navigator.pop(
+                      dialogContext,
+                      _OpeningGeometryInput(
+                        widthMeters: width,
+                        distanceFromWallStartMeters: position,
+                        openingHeightMeters: height,
+                        sillHeightMeters: sill,
+                      ),
+                    );
+                  },
+                  child: Text(localizations.save),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    widthMetricController.dispose();
+    positionMetricController.dispose();
+    widthFeetController.dispose();
+    widthInchesController.dispose();
+    positionFeetController.dispose();
+    positionInchesController.dispose();
+    heightMetricController.dispose();
+    sillMetricController.dispose();
+    heightFeetController.dispose();
+    heightInchesController.dispose();
+    sillFeetController.dispose();
+    sillInchesController.dispose();
+
+    if (!mounted || input == null) return;
+
+    final result = await provider.updateOpeningGeometry(
+      roomId: selection.roomId,
+      featureId: selection.feature.id,
+      widthMeters: input.widthMeters,
+      distanceFromWallStartMeters:
+          input.distanceFromWallStartMeters,
+      openingHeightMeters: input.openingHeightMeters,
+      sillHeightMeters: input.sillHeightMeters,
+    );
+
+    if (!mounted) return;
+    _showMessage(
+      result.isSuccess
+          ? localizations.openingUpdated
+          : result.errorMessage ??
+              localizations.invalidOpeningMeasurement,
+      error: !result.isSuccess,
+    );
+  }
+
+  Future<OpeningConnectionSide?> _chooseConnectionSide(
+    WallFeature feature,
+  ) {
+    final start = _transformPoint(feature.start);
+    final end = _transformPoint(feature.end);
+    final openingDirection = end - start;
+    final leftDirection = Offset(
+      -openingDirection.dy,
+      openingDirection.dx,
+    );
+    final rightDirection = -leftDirection;
+
+    return showDialog<OpeningConnectionSide>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('¿Hacia dónde continúa el plano?'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'El punto verde marca dónde comenzará el nuevo ambiente. '
+                'Elegí la flecha que apunta hacia el ambiente que vas a escanear.',
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: 240,
+                height: 120,
+                child: CustomPaint(
+                  painter: _OpeningDirectionPainter(
+                    openingDirection: openingDirection,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () => Navigator.pop(
+                    dialogContext,
+                    OpeningConnectionSide.left,
+                  ),
+                  icon: Icon(_directionIcon(leftDirection)),
+                  label: Text(
+                    'Continuar hacia ${_directionLabel(leftDirection)}',
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: () => Navigator.pop(
+                    dialogContext,
+                    OpeningConnectionSide.right,
+                  ),
+                  icon: Icon(_directionIcon(rightDirection)),
+                  label: Text(
+                    'Continuar hacia ${_directionLabel(rightDirection)}',
+                  ),
+                ),
+              ),
+            ],
           ),
           actions: [
             TextButton(
@@ -1058,8 +1196,7 @@ class _FloorPlanViewerScreenState
                 rooms,
               );
 
-              return Stack(
-                children: [
+              return Stack(                children: [
                   InteractiveViewer(
                     constrained: true,
                     boundaryMargin:
@@ -1395,7 +1532,71 @@ class _FloorPlanViewerScreenState
                   crossAxisAlignment:
                       CrossAxisAlignment
                           .start,
-                  ch                                GeometryService
+                  children: [
+                    Row(
+                      children: [
+                        const Expanded(
+                          child: Text(
+                            'Ambientes registrados',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight:
+                                  FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: 'Cerrar',
+                          onPressed: () {
+                            Navigator.pop(
+                              bottomSheetContext,
+                            );
+                          },                          icon: const Icon(
+                            Icons.close,
+                          ),
+                        ),
+                      ],                    ),
+                    const SizedBox(
+                      height: 8,
+                    ),
+
+                    if (rooms.isEmpty)
+                      const Padding(
+                        padding:
+                            EdgeInsets.symmetric(
+                          vertical: 32,
+                        ),
+                        child: Center(
+                          child: Text(
+                            'No hay ambientes aún.',
+                          ),
+                        ),
+                      )
+                    else
+                      Flexible(
+                        child:
+                            ListView.separated(
+                          shrinkWrap: true,
+                          itemCount:
+                              rooms.length,
+                          separatorBuilder:
+                              (
+                            context,
+                            index,
+                          ) =>
+                                  const Divider(
+                            height: 1,
+                          ),
+                          itemBuilder:
+                              (
+                            context,
+                            index,
+                          ) {
+                            final room =
+                                rooms[index];
+
+                            final area =
+                                GeometryService
                                     .calculateArea(
                               room.points,
                             );
@@ -1594,8 +1795,7 @@ class _FloorPlanViewerScreenState
     RoomModel room,
   ) async {
     final controller =
-        TextEditingController(
-      text: room.name,
+        TextEditingController(      text: room.name,
     );
 
     final newName =
@@ -2793,8 +2993,7 @@ class FloorPlanPainter
         index++) {
       final nextIndex =
           (index + 1) % wallPoints.length;
-      final distance = _distanceToSegment(
-        point,
+      final distance = _distanceToSegment(        point,
         wallPoints[index],
         wallPoints[nextIndex],
       );
@@ -2992,7 +3191,9 @@ class FloorPlanPainter
     required Paint paint,
   }) {
     final opening = end - start;
-    final width = opening.dis    if (width <= 0.000001) {
+    final width = opening.distance;
+
+    if (width <= 0.000001) {
       return;
     }
 
