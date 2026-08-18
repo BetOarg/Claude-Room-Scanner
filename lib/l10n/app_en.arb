@@ -53,5 +53,38 @@
       }
     }
   },
-  "continueMeasuring": "Continue measuring"
+  "continueMeasuring": "Continue measuring",
+  "cameraResumeFailed": "The camera could not be resumed: {error}",
+  "@cameraResumeFailed": {
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  "continuationFromOpening": "Continuation from an opening",
+  "continuationFirstCornerInstruction": "From the green point, measure the distance to the first actual corner of the room.",
+  "markRoomStartingPoint": "Mark the room's starting point.",
+  "measureNextCornerInstruction": "Measure the distance to the next corner and choose its direction.",
+  "traceStarted": "Drawing started",
+  "cornerRegistered": "Corner {count} registered",
+  "@cornerRegistered": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "needThreeCornersToClose": "You need at least 3 corners to close the room.",
+  "canContinueOrClose": "You can continue adding corners or close the room.",
+  "lastCornerRemoved": "Last corner removed.",
+  "measureFirstCorner": "Measure first corner",
+  "measureFirstCornerBeforeFeatures": "First, measure the first actual corner of the room.",
+  "couldNotAddStart": "The starting point could not be added.",
+  "startMarked": "Starting point marked. Now measure the first wall.",
+  "couldNotCalculateCorner": "The new corner could not be calculated.",
+  "invalidCorner": "The corner is not valid.",
+  "firstCornerRegistered": "First corner registered. Continue measuring the room's walls.",
+  "measurementRegistrationFailed": "The measurement could not be registered: {error}",
+  "@measurementRegistrationFailed": {
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  }
 }
