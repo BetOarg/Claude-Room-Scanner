@@ -287,6 +287,20 @@ class _FloorPlanViewerScreenState
                   ),
                 ),
                 const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () => Navigator.pop(
+                      bottomSheetContext,
+                      _FeatureMenuAction.editGeometry,
+                    ),
+                    icon: const Icon(Icons.straighten),
+                    label: Text(
+                      localizations.editOpeningDimensions,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
                 if (feature.type == FeatureType.door) ...[
                   SizedBox(
                     width: double.infinity,
@@ -342,6 +356,11 @@ class _FloorPlanViewerScreenState
     );
 
     if (!mounted) return;
+
+    if (action == _FeatureMenuAction.editGeometry) {
+      await _showOpeningGeometryEditor(selection);
+      return;
+    }
 
     if (action == _FeatureMenuAction.toggleHinge) {
       final updated = await context
@@ -414,6 +433,240 @@ class _FloorPlanViewerScreenState
       projectUuid: projectUuid,
       projectName: provider.projectName,
       continuationReference: reference,
+    );
+  }
+
+  Future<void> _showOpeningGeometryEditor(
+    _FeatureSelection selection,
+  ) async {
+    final provider = context.read<FloorPlanProvider>();
+    final placement = provider.getOpeningPlacement(
+      roomId: selection.roomId,
+      featureId: selection.feature.id,
+    );
+    final localizations = AppLocalizations.of(context)!;
+    final measurementSystem = context
+        .read<MeasurementSettingsProvider>()
+        .system;
+
+    if (placement == null) {
+      _showMessage(
+        'No se pudo identificar la pared de la abertura.',
+        error: true,
+      );
+      return;
+    }
+
+    final widthMetricController = TextEditingController(
+      text: _formatDecimal(placement.widthMeters),
+    );
+    final positionMetricController = TextEditingController(
+      text: _formatDecimal(
+        placement.distanceFromWallStartMeters,
+      ),
+    );
+    final widthImperial = MeasurementUnits.metersToFeetAndInches(
+      placement.widthMeters,
+    );
+    final positionImperial =
+        MeasurementUnits.metersToFeetAndInches(
+      placement.distanceFromWallStartMeters,
+    );
+    final widthFeetController = TextEditingController(
+      text: widthImperial.feet.toString(),
+    );
+    final widthInchesController = TextEditingController(
+      text: _formatDecimal(widthImperial.inches),
+    );
+    final positionFeetController = TextEditingController(
+      text: positionImperial.feet.toString(),
+    );
+    final positionInchesController = TextEditingController(
+      text: _formatDecimal(positionImperial.inches),
+    );
+
+    double? readLength({
+      required TextEditingController metric,
+      required TextEditingController feet,
+      required TextEditingController inches,
+    }) {
+      if (measurementSystem == MeasurementSystem.metric) {
+        return MeasurementUnits.metricInputToMeters(metric.text);
+      }
+      return MeasurementUnits.imperialInputToMeters(
+        feetInput: feet.text,
+        inchesInput: inches.text,
+      );
+    }
+
+    final input = await showDialog<_OpeningGeometryInput>(
+      context: context,
+      builder: (dialogContext) {
+        String? validationMessage;
+
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            Widget lengthFields({
+              required String label,
+              required TextEditingController metric,
+              required TextEditingController feet,
+              required TextEditingController inches,
+            }) {
+              if (measurementSystem == MeasurementSystem.metric) {
+                return TextField(
+                  controller: metric,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  decoration: InputDecoration(
+                    labelText: label,
+                    suffixText: localizations.meters,
+                    border: const OutlineInputBorder(),
+                  ),
+                );
+              }
+
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: feet,
+                          keyboardType:
+                              const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                          decoration: InputDecoration(
+                            labelText: localizations.feet,
+                            border: const OutlineInputBorder(),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextField(
+                          controller: inches,
+                          keyboardType:
+                              const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                          decoration: InputDecoration(
+                            labelText: localizations.inches,
+                            border: const OutlineInputBorder(),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              );
+            }
+
+            return AlertDialog(
+              title: Text(localizations.editOpeningDimensions),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${localizations.wallLength}: '
+                      '${_formatLength(placement.wallLengthMeters, measurementSystem)}',
+                    ),
+                    const SizedBox(height: 16),
+                    lengthFields(
+                      label: localizations.openingWidth,
+                      metric: widthMetricController,
+                      feet: widthFeetController,
+                      inches: widthInchesController,
+                    ),
+                    const SizedBox(height: 16),
+                    lengthFields(
+                      label: localizations.distanceFromWallStart,
+                      metric: positionMetricController,
+                      feet: positionFeetController,
+                      inches: positionInchesController,
+                    ),
+                    if (validationMessage != null) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        validationMessage!,
+                        style: TextStyle(color: Colors.red.shade700),
+                      ),
+                    ],                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: Text(localizations.cancel),
+                ),
+                FilledButton(
+                  onPressed: () {
+                    final width = readLength(
+                      metric: widthMetricController,
+                      feet: widthFeetController,
+                      inches: widthInchesController,
+                    );
+                    final position = readLength(
+                      metric: positionMetricController,
+                      feet: positionFeetController,
+                      inches: positionInchesController,
+                    );
+
+                    if (width == null || position == null) {
+                      setDialogState(() {
+                        validationMessage =
+                            localizations.invalidOpeningMeasurement;
+                      });
+                      return;
+                    }
+
+                    Navigator.pop(
+                      dialogContext,
+                      _OpeningGeometryInput(
+                        widthMeters: width,
+                        distanceFromWallStartMeters: position,
+                      ),
+                    );
+                  },
+                  child: Text(localizations.save),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    widthMetricController.dispose();
+    positionMetricController.dispose();
+    widthFeetController.dispose();
+    widthInchesController.dispose();
+    positionFeetController.dispose();
+    positionInchesController.dispose();
+
+    if (!mounted || input == null) return;
+
+    final result = await provider.updateOpeningGeometry(
+      roomId: selection.roomId,
+      featureId: selection.feature.id,
+      widthMeters: input.widthMeters,
+      distanceFromWallStartMeters:
+          input.distanceFromWallStartMeters,
+    );
+
+    if (!mounted) return;
+    _showMessage(
+      result.isSuccess
+          ? localizations.openingUpdated
+          : result.errorMessage ??
+              localizations.invalidOpeningMeasurement,
+      error: !result.isSuccess,
     );
   }
 
@@ -943,8 +1196,7 @@ class _FloorPlanViewerScreenState
                             const EdgeInsets
                                 .symmetric(
                           horizontal: 12,
-                          vertical: 8,
-                        ),
+                          vertical: 8,                        ),
                         decoration:
                             BoxDecoration(
                           color: Colors
@@ -1543,8 +1795,7 @@ class _FloorPlanViewerScreenState
               error
                   ? Colors.red.shade700
                   : null,
-          content: Text(
-            message,
+          content: Text(            message,
           ),
         ),
       );
@@ -1576,8 +1827,19 @@ class _RoomListAction {
 
 enum _FeatureMenuAction {
   continueScanning,
+  editGeometry,
   toggleHinge,
   toggleSwing,
+}
+
+class _OpeningGeometryInput {
+  final double widthMeters;
+  final double distanceFromWallStartMeters;
+
+  const _OpeningGeometryInput({
+    required this.widthMeters,
+    required this.distanceFromWallStartMeters,
+  });
 }
 
 class _FeatureSelection {
@@ -2132,8 +2394,7 @@ class FloorPlanPainter
         end + outwardNormal * extensionStartOffset,
         end + outwardNormal * extensionEndOffset,
         dimensionPaint,
-      );
-      canvas.drawLine(
+      );      canvas.drawLine(
         dimensionStart,
         dimensionEnd,
         dimensionPaint,
@@ -2732,8 +2993,7 @@ class FloorPlanPainter
             canvas: canvas,
             start: start,
             end: end,
-            paint: windowPaint,
-          );
+            paint: windowPaint,          );
           break;
       }
 
