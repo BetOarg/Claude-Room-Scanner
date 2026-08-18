@@ -133,10 +133,12 @@
   "squareFeet": "pies cuadrados",
   "changeDoorHingeSide": "Cambiar lado de la bisagra",
   "changeDoorOpeningDirection": "Cambiar sentido de apertura",
-  "editOpeningDimensions": "Editar ancho y posición",
+  "editOpeningDimensions": "Editar medidas y posición",
   "openingWidth": "Ancho de la abertura",
   "distanceFromWallStart": "Distancia desde la esquina inicial de la pared",
   "wallLength": "Longitud de la pared",
   "invalidOpeningMeasurement": "Ingresá medidas válidas para el ancho y la posición.",
-  "openingUpdated": "Abertura actualizada correctamente."
+  "openingUpdated": "Abertura actualizada correctamente.",
+  "openingHeight": "Altura de la abertura",
+  "sillHeight": "Altura desde el piso"
 }
