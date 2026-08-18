@@ -132,5 +132,11 @@
   "squareMeters": "square meters",
   "squareFeet": "square feet",
   "changeDoorHingeSide": "Change hinge side",
-  "changeDoorOpeningDirection": "Change opening direction"
+  "changeDoorOpeningDirection": "Change opening direction",
+  "editOpeningDimensions": "Edit width and position",
+  "openingWidth": "Opening width",
+  "distanceFromWallStart": "Distance from the starting wall corner",
+  "wallLength": "Wall length",
+  "invalidOpeningMeasurement": "Enter valid measurements for the width and position.",
+  "openingUpdated": "Opening updated successfully."
 }
