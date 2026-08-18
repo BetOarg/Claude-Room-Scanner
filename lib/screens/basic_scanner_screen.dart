@@ -595,8 +595,7 @@ class _BasicScannerScreenState
       ),
     );
   }
-  Widget _buildTopHud(
-    ScannerProvider provider,
+  Widget _buildTopHud(    ScannerProvider provider,
   ) {
     final l10n =
         AppLocalizations.of(context)!;
@@ -1164,8 +1163,7 @@ class _BasicScannerScreenState
     );
   }
   Widget _buildModeSelector() {
-    final l10n =
-        AppLocalizations.of(context)!;
+    final l10n =        AppLocalizations.of(context)!;
 
     return Row(
       children: [
@@ -1507,15 +1505,8 @@ class _BasicScannerScreenState
 
     if (provider.currentPointsCount == 0) {
       final point =
-          await _scannerAdapter
-              .capturePoint();
-
-      if (point == null) {
-        _showMessage(
-          'No se pudo crear el punto inicial.',
-        );
-        return;
-      }
+          _scannerAdapter
+              .captureInitialPoint();
 
       final result =
           provider.tryAddPoint(
@@ -1746,8 +1737,7 @@ class _BasicScannerScreenState
         TextEditingController();
 
     final angleController = TextEditingController(
-      text: _formatAngle(_lastAngleDegrees),
-    );
+      text: _formatAngle(_lastAngleDegrees),    );
 
     final featureWidthController =
         TextEditingController(
@@ -2299,8 +2289,7 @@ class _BasicScannerScreenState
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(
-        SnackBar(
-          behavior:
+        SnackBar(          behavior:
               SnackBarBehavior.floating,
           backgroundColor:
               Colors.red.shade800,
