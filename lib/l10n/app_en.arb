@@ -140,5 +140,23 @@
   "invalidOpeningMeasurement": "Enter valid measurements for the width and position.",
   "openingUpdated": "Opening updated successfully.",
   "openingHeight": "Opening height",
-  "sillHeight": "Height above floor"
+  "sillHeight": "Height above floor",
+  "horizontalOrientation": "Horizontal",
+  "verticalOrientation": "Vertical",
+  "doorPlanDimensions": "{width} wide · {height} high",
+  "@doorPlanDimensions": {
+    "placeholders": {
+      "width": {"type": "String"},
+      "height": {"type": "String"}
+    }
+  },
+  "windowPlanDimensions": "{width} wide · {height} high\n{sill} above floor · {orientation}",
+  "@windowPlanDimensions": {
+    "placeholders": {
+      "width": {"type": "String"},
+      "height": {"type": "String"},
+      "sill": {"type": "String"},
+      "orientation": {"type": "String"}
+    }
+  }
 }
