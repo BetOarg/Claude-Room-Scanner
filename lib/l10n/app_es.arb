@@ -140,5 +140,23 @@
   "invalidOpeningMeasurement": "Ingresá medidas válidas para el ancho y la posición.",
   "openingUpdated": "Abertura actualizada correctamente.",
   "openingHeight": "Altura de la abertura",
-  "sillHeight": "Altura desde el piso"
+  "sillHeight": "Altura desde el piso",
+  "horizontalOrientation": "Horizontal",
+  "verticalOrientation": "Vertical",
+  "doorPlanDimensions": "{width} de ancho · {height} de alto",
+  "@doorPlanDimensions": {
+    "placeholders": {
+      "width": {"type": "String"},
+      "height": {"type": "String"}
+    }
+  },
+  "windowPlanDimensions": "{width} de ancho · {height} de alto\n{sill} desde el piso · {orientation}",
+  "@windowPlanDimensions": {
+    "placeholders": {
+      "width": {"type": "String"},
+      "height": {"type": "String"},
+      "sill": {"type": "String"},
+      "orientation": {"type": "String"}
+    }
+  }
 }
