@@ -31,19 +31,44 @@ void main() async {
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => ProjectProvider()),
-        ChangeNotifierProvider(create: (_) => ScannerProvider()),
         ChangeNotifierProvider.value(
           value:
               measurementSettingsProvider,
+        ),
+        ChangeNotifierProxyProvider<
+            MeasurementSettingsProvider,
+            ScannerProvider>(
+          create: (_) => ScannerProvider(),
+          update: (
+            _,
+            settingsProvider,
+            scannerProvider,
+          ) {
+            final provider =
+                scannerProvider ?? ScannerProvider();
+            provider.measurementSystem =
+                settingsProvider.system;
+            return provider;
+          },
         ),
         // FloorPlanProvider es el estado en memoria del proyecto abierto;
         // se conecta aquí a ProjectProvider (Isar) como su única vía de
         // persistencia durable, en vez de guardar por su cuenta en un
         // archivo aparte como hacía antes.
-        ChangeNotifierProxyProvider<ProjectProvider, FloorPlanProvider>(
+        ChangeNotifierProxyProvider2<
+            ProjectProvider,
+            MeasurementSettingsProvider,
+            FloorPlanProvider>(
           create: (_) => FloorPlanProvider(),
-          update: (_, projectProvider, floorPlanProvider) {
+          update: (
+            _,
+            projectProvider,
+            settingsProvider,
+            floorPlanProvider,
+          ) {
             final provider = floorPlanProvider ?? FloorPlanProvider();
+            provider.measurementSystem =
+                settingsProvider.system;
             provider.persister = ({
               required String uuid,
               required String name,
