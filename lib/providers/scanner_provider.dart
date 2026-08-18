@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 
 import '../models/room_model.dart';
+import '../utils/measurement_units.dart';
 import '../utils/scan_validator.dart';
 
 /// Estado de la sesión de escaneo activa.
@@ -10,6 +11,9 @@ import '../utils/scan_validator.dart';
 /// Mantiene la habitación en curso y las habitaciones cerradas durante
 /// la sesión. Cada punto nuevo se valida antes de incorporarse.
 class ScannerProvider extends ChangeNotifier {
+  MeasurementSystem measurementSystem =
+      MeasurementSystem.metric;
+
   final List<RoomModel> _rooms = [];
 
   RoomModel? _currentRoom;
@@ -221,7 +225,8 @@ class ScannerProvider extends ChangeNotifier {
             !widthMeters.isFinite ||
             widthMeters < 0.20)) {
       return ValidationResult.invalid(
-        'Ingresá un ancho mínimo de 0,20 m.',
+        'Ingresá un ancho mínimo de '
+        '${_formatLength(0.20)}.',
       );
     }
 
@@ -405,7 +410,7 @@ class ScannerProvider extends ChangeNotifier {
         return ValidationResult.invalid(
           'Los dos puntos de la abertura están demasiado cerca. '
           'Medida detectada: '
-          '${measuredWidth.toStringAsFixed(2)} m.',
+          '${_formatLength(measuredWidth)}.',
         );
       }
     } else {
@@ -416,9 +421,9 @@ class ScannerProvider extends ChangeNotifier {
           wallLength) {
         return ValidationResult.invalid(
           'La abertura mide '
-          '${measuredWidth.toStringAsFixed(2)} m, '
+          '${_formatLength(measuredWidth)}, '
           'pero la pared mide '
-          '${wallLength.toStringAsFixed(2)} m.',
+          '${_formatLength(wallLength)}.',
         );
       }
 
@@ -542,8 +547,7 @@ class ScannerProvider extends ChangeNotifier {
       ).clamp(0.0, 1.0)
               .toDouble();
 
-      final existingMinT =
-          math.min(
+      final existingMinT =          math.min(
         existingStartT,
         existingEndT,
       ).toDouble();
@@ -594,7 +598,20 @@ class ScannerProvider extends ChangeNotifier {
     notifyListeners();
     return ValidationResult.warning(
       'Abertura medida: '
-      '${measuredWidth.toStringAsFixed(2)} m.',
+      '${_formatLength(measuredWidth)}.',
+    );
+  }
+
+  String _formatLength(
+    double meters,
+  ) {
+    return MeasurementUnits.formatLength(
+      meters,
+      measurementSystem,
+      metersLabel: 'metros',
+      feetLabel: 'pies',
+      inchesLabel: 'pulgadas',
+      decimalSeparator: ',',
     );
   }
   void removeLastPoint() {
