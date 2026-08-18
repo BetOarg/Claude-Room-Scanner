@@ -20,27 +20,20 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Cache stable Android debug key
-        uses: actions/cache@v4
-        with:
-          path: ~/.android/debug.keystore
-          key: ${{ runner.os }}-room-scanner-debug-keystore-v1
-
-      - name: Ensure stable Android debug key
+      # Clave pública exclusiva para APK de prueba.
+      # No utilizar esta firma para una publicación en Play Store.
+      - name: Install fixed Android test signing key
         shell: bash
         run: |
           mkdir -p ~/.android
-          if [ ! -f ~/.android/debug.keystore ]; then
-            keytool -genkeypair \
-              -keystore ~/.android/debug.keystore \
-              -storepass android \
-              -alias androiddebugkey \
-              -keypass android \
-              -dname "CN=Android Debug,O=Room Scanner,C=AR" \
-              -keyalg RSA \
-              -keysize 2048 \
-              -validity 10000
-          fi
+          base64 --decode \
+            .github/signing/room-scanner-test.keystore.b64 \
+            > ~/.android/debug.keystore
+
+          keytool -list \
+            -keystore ~/.android/debug.keystore \
+            -storepass android \
+            -alias androiddebugkey
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
@@ -60,7 +53,7 @@ jobs:
           flutter build apk \
             --debug \
             --android-skip-build-dependency-validation \
-            --build-name="2.5.${{ github.run_number }}" \
+            --build-name="2.6.${{ github.run_number }}" \
             --build-number="${{ github.run_number }}"
 
           cp build/app/outputs/flutter-apk/app-debug.apk \
