@@ -597,8 +597,7 @@ class _BasicScannerScreenState
                       .size
                       .width,
           height:              controller.value.previewSize?.width ??
-                  MediaQuery.of(context)                      .size
-                      .height,
+                  MediaQuery.of(context)                      .size                      .height,
           child: CameraPreview(            controller,
           ),
         ),
@@ -1197,8 +1196,7 @@ class _BasicScannerScreenState
     return Row(
       children: [
         Expanded(          child: _modeButton(
-            BasicAppMode.wall,            Icons.wallpaper,
-            l10n.wall,
+            BasicAppMode.wall,            Icons.wallpaper,            l10n.wall,
           ),
         ),
         const SizedBox(
@@ -1797,13 +1795,15 @@ class _BasicScannerScreenState
           ),
         ],      ),
     );
-
     return confirmed ?? false;
   }
 
   Future<void> _captureFeature(
     ScannerProvider provider,
   ) async {
+    final l10n =
+        AppLocalizations.of(context)!;
+
     int? preferredWallIndex;
 
     if (provider.currentPointsCount >= 3) {
@@ -1850,7 +1850,7 @@ class _BasicScannerScreenState
 
       if (candidate == null) {
         _showMessage(
-          'No se pudo calcular la ubicación.',
+          l10n.couldNotCalculateLocation,
         );
         return;
       }
@@ -1869,7 +1869,7 @@ class _BasicScannerScreenState
             .cancelPendingMeasurement();
 
         _showValidationError(
-          'Ingresá el ancho de la abertura.',
+          l10n.enterOpeningWidth,
         );
 
         return;
@@ -1893,7 +1893,7 @@ class _BasicScannerScreenState
       if (!result.isValid) {
         _showValidationError(
           result.errorMessage ??
-              'No se pudo asociar la abertura a una pared.',
+              l10n.couldNotAttachOpening,
         );
 
         return;
@@ -1902,15 +1902,21 @@ class _BasicScannerScreenState
       _showMessage(
         featureType ==
                 FeatureType.door
-            ? 'Puerta de ${width.toStringAsFixed(2)} m ajustada a la pared.'
-            : 'Ventana de ${width.toStringAsFixed(2)} m ajustada a la pared.',
+            ? l10n.doorAdjustedToWall(
+                width.toStringAsFixed(2),
+              )
+            : l10n.windowAdjustedToWall(
+                width.toStringAsFixed(2),
+              ),
       );
     } catch (error) {
       _scannerAdapter
           .cancelPendingMeasurement();
 
       _showMessage(
-        'No se pudo registrar la ubicación: $error',
+        l10n.locationRegistrationFailed(
+          error.toString(),
+        ),
       );
     } finally {
       if (mounted) {
@@ -1924,28 +1930,31 @@ class _BasicScannerScreenState
   Future<int?> _showFeatureWallDialog(
     int pointCount,
   ) {
+    final l10n =
+        AppLocalizations.of(context)!;
+
     return showDialog<int>(
       context: context,
       builder: (dialogContext) {        return AlertDialog(
-          title: const Text(
-            '¿En qué pared está la abertura?',
+          title: Text(
+            l10n.openingWallQuestion,
           ),
-          content: const Text(
-            'Elegí la pared de cierre si la puerta o ventana está sobre el tramo que une la última esquina con la primera.',
+          content: Text(
+            l10n.openingWallExplanation,
           ),
           actions: [
             TextButton(
               onPressed: () {
                 Navigator.of(dialogContext).pop();
               },
-              child: const Text('Cancelar'),
+              child: Text(l10n.cancel),
             ),
             OutlinedButton(
               onPressed: () {
                 Navigator.of(dialogContext).pop(-1);
               },
-              child: const Text(
-                'Detectar pared automáticamente',
+              child: Text(
+                l10n.detectWallAutomatically,
               ),
             ),
             FilledButton(
@@ -1954,8 +1963,8 @@ class _BasicScannerScreenState
                   pointCount - 1,
                 );
               },
-              child: const Text(
-                'Usar pared de cierre',
+              child: Text(
+                l10n.useClosingWall,
               ),
             ),
           ],
@@ -1969,6 +1978,9 @@ class _BasicScannerScreenState
     required int nextCorner,
     bool featureMode = false,
   }) async {
+    final l10n =
+        AppLocalizations.of(context)!;
+
     final distanceController =
         TextEditingController();
 
@@ -2007,8 +2019,8 @@ class _BasicScannerScreenState
                   Expanded(
                     child: Text(
                       featureMode
-                          ? 'Ubicar elemento'
-                          : 'Medir esquina',
+                          ? l10n.placeElement
+                          : l10n.measureCorner,
                     ),
                   ),
                 ],
@@ -2040,8 +2052,8 @@ class _BasicScannerScreenState
                       ),
                       child: Text(
                         featureMode
-                            ? 'Indicá cuánto hay desde la última posición hasta la puerta o ventana.'
-                            : 'Indicá cuánto hay desde la última esquina hasta la nueva esquina.',
+                            ? l10n.featureDistanceInstruction
+                            : l10n.cornerDistanceInstruction,
                         style:
                             const TextStyle(
                           fontSize: 13,
@@ -2062,11 +2074,11 @@ class _BasicScannerScreenState
                       ),
                       decoration:
                           InputDecoration(
-                        labelText:                            'Distancia',
+                        labelText:                            l10n.distance,
                         hintText:
-                            'Ejemplo: 3,50',
+                            l10n.distanceExample,
                         suffixText:
-                            'metros',
+                            l10n.meters,
                         prefixIcon:
                             const Icon(
                           Icons.straighten,
@@ -2074,7 +2086,7 @@ class _BasicScannerScreenState
                         errorText:
                             distanceError !=
                                     null
-                                ? 'Ingresá una distancia mayor a 0'
+                                ? l10n.enterPositiveDistance
                                 : null,
                         border:
                             const OutlineInputBorder(),
@@ -2100,11 +2112,11 @@ class _BasicScannerScreenState
                       decoration:
                           InputDecoration(
                         labelText:
-                            'Dirección',
+                            l10n.direction,
                         hintText:
-                            'Ejemplo: 90',
+                            l10n.directionExample,
                         suffixText:
-                            'grados',
+                            l10n.degrees,
                         prefixIcon:
                             const Icon(
                           Icons.explore,
@@ -2112,7 +2124,7 @@ class _BasicScannerScreenState
                         errorText:
                             angleError !=
                                     null
-                                ? 'Ingresá una dirección válida'                                : null,
+                                ? l10n.enterValidDirection                                : null,
                         border:
                             const OutlineInputBorder(),
                       ),
@@ -2133,13 +2145,13 @@ class _BasicScannerScreenState
                             InputDecoration(
                           labelText:
                               _currentMode ==
-                                      BasicAppMode.door
-                                  ? 'Ancho de la puerta'
-                                  : 'Ancho de la ventana',
+                                  BasicAppMode.door
+                                  ? l10n.doorWidth
+                                  : l10n.windowWidth,
                           hintText:
-                              'Ejemplo: 1,20',
+                              l10n.widthExample,
                           suffixText:
-                              'metros',
+                              l10n.meters,
                           prefixIcon:
                               const Icon(
                             Icons.width_normal,
@@ -2147,7 +2159,7 @@ class _BasicScannerScreenState
                           errorText:
                               featureWidthError !=
                                       null
-                                  ? 'Ingresá un ancho mínimo de 0,20 m'
+                                  ? l10n.enterMinimumOpeningWidth
                                   : null,
                           border:
                               const OutlineInputBorder(),
@@ -2157,10 +2169,10 @@ class _BasicScannerScreenState
                     const SizedBox(
                       height: 12,
                     ),
-                    const Text(
-                      'Dirección rápida:',
+                    Text(
+                      l10n.quickDirection,
                       style:
-                          TextStyle(
+                          const TextStyle(
                         fontWeight:
                             FontWeight.bold,
                         fontSize: 12,
@@ -2172,28 +2184,28 @@ class _BasicScannerScreenState
                     Wrap(                      spacing: 6,                      runSpacing: 6,
                       children: [
                         _angleChip(
-                          'Frente',
+                          l10n.front,
                           Icons.arrow_upward,
                           0,
                           angleController,
                           setDialogState,
                         ),
                         _angleChip(
-                          'Derecha',
+                          l10n.right,
                           Icons.arrow_forward,
                           90,
                           angleController,
                           setDialogState,
                         ),
                         _angleChip(
-                          'Atrás',
+                          l10n.back,
                           Icons.arrow_downward,
                           180,
                           angleController,
                           setDialogState,
                         ),
                         _angleChip(
-                          'Izquierda',
+                          l10n.left,
                           Icons.arrow_back,
                           270,
                           angleController,
@@ -2271,8 +2283,8 @@ class _BasicScannerScreenState
                     ),
                     Text(
                       featureMode
-                          ? 'Esto no crea una esquina nueva del ambiente.'
-                          : 'La nueva posición se valida antes de incorporarla al plano.',
+                          ? l10n.featureDoesNotCreateCorner
+                          : l10n.positionValidatedBeforeAdding,
                       style:
                           const TextStyle(
                         color:
@@ -2291,8 +2303,8 @@ class _BasicScannerScreenState
                     );
                   },
                   child:
-                      const Text(
-                    'Cancelar',
+                      Text(
+                    l10n.cancel,
                   ),
                 ),
                 FilledButton.icon(
@@ -2369,8 +2381,8 @@ class _BasicScannerScreenState
                     Icons.check,
                   ),
                   label:
-                      const Text(
-                    'Usar medición',
+                      Text(
+                    l10n.useMeasurement,
                   ),
                 ),
               ],
@@ -2382,8 +2394,7 @@ class _BasicScannerScreenState
   }
 
   Widget _angleChip(
-    String label,
-    IconData icon,
+    String label,    IconData icon,
     double value,
     TextEditingController controller,
     StateSetter setDialogState,
@@ -2982,8 +2993,7 @@ class _ScannerGuidePainter
     );
   }
 
-  void _drawCenterGuide(
-    Canvas canvas,
+  void _drawCenterGuide(    Canvas canvas,
     Size size, {
     bool onlyCross = false,
   }) {
