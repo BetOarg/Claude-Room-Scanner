@@ -9,6 +9,7 @@ import 'models/room_model.dart';
 import 'providers/scanner_provider.dart';
 import 'providers/floor_plan_provider.dart';
 import 'providers/project_provider.dart';
+import 'providers/measurement_settings_provider.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/login_screen.dart';
 import 'services/auth_service.dart';
@@ -27,6 +28,10 @@ void main() async {
       providers: [
         ChangeNotifierProvider(create: (_) => ProjectProvider()),
         ChangeNotifierProvider(create: (_) => ScannerProvider()),
+        ChangeNotifierProvider(
+          create: (_) =>
+              MeasurementSettingsProvider(),
+        ),
         // FloorPlanProvider es el estado en memoria del proyecto abierto;
         // se conecta aquí a ProjectProvider (Isar) como su única vía de
         // persistencia durable, en vez de guardar por su cuenta en un
