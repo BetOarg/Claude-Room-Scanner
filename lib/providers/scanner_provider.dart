@@ -246,14 +246,21 @@ class ScannerProvider extends ChangeNotifier {
     double nearestDistanceSquared =
         double.infinity;
 
+    // Con tres o más esquinas también existe el tramo de cierre entre la
+    // última esquina y la primera. Debe participar antes de cerrar el ambiente
+    // para poder colocar puertas o ventanas sobre esa pared.
+    final wallCount = points.length >= 3
+        ? points.length
+        : points.length - 1;
+
     for (int index = 0;
-        index < points.length - 1;
+        index < wallCount;
         index++) {
       final start =
           points[index];
 
       final end =
-          points[index + 1];
+          points[(index + 1) % points.length];
 
       final dx =
           end.x - start.x;
@@ -316,7 +323,7 @@ class ScannerProvider extends ChangeNotifier {
         points[nearestWallIndex];
 
     final wallEnd =
-        points[nearestWallIndex + 1];
+        points[(nearestWallIndex + 1) % points.length];
 
     final wallDx =
         wallEnd.x - wallStart.x;
@@ -573,7 +580,6 @@ class ScannerProvider extends ChangeNotifier {
     );
 
     notifyListeners();
-
     return ValidationResult.warning(
       'Abertura medida: '
       '${measuredWidth.toStringAsFixed(2)} m.',
