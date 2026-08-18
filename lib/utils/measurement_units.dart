@@ -42,6 +42,48 @@ class MeasurementUnits {
         squareFeetPerSquareMeter;
   }
 
+  static String formatLength(
+    double meters,
+    MeasurementSystem system, {
+    required String metersLabel,
+    required String feetLabel,
+    required String inchesLabel,
+    String decimalSeparator = '.',
+    int decimals = 2,
+  }) {
+    if (!meters.isFinite || meters < 0) {
+      throw ArgumentError.value(
+        meters,
+        'meters',
+        'La longitud debe ser un número finito mayor o igual que cero.',
+      );
+    }
+
+    if (system == MeasurementSystem.metric) {
+      return '${_formatDecimal(meters, decimals, decimalSeparator)} '
+          '$metersLabel';
+    }
+
+    final imperial = metersToFeetAndInches(
+      meters,
+      inchDecimals: decimals,
+    );
+    final parts = <String>[];
+
+    if (imperial.feet > 0) {
+      parts.add('${imperial.feet} $feetLabel');
+    }
+
+    if (imperial.inches > 0 || parts.isEmpty) {
+      parts.add(
+        '${_formatDecimal(imperial.inches, decimals, decimalSeparator)} '
+        '$inchesLabel',
+      );
+    }
+
+    return parts.join(' ');
+  }
+
   static double feetAndInchesToMeters({
     required double feet,
     required double inches,
@@ -173,5 +215,31 @@ class MeasurementUnits {
     }
 
     return factor;
+  }
+
+  static String _formatDecimal(
+    double value,
+    int decimals,
+    String decimalSeparator,
+  ) {
+    final factor = _decimalFactor(decimals);
+    final formatted =
+        (value * factor).roundToDouble() / factor;
+    var text = formatted.toStringAsFixed(decimals);
+
+    while (text.contains('.') &&
+        text.endsWith('0')) {
+      text = text.substring(0, text.length - 1);
+    }
+
+    if (text.endsWith('.')) {
+      text = text.substring(0, text.length - 1);
+    }
+
+    if (decimalSeparator != '.') {
+      text = text.replaceAll('.', decimalSeparator);
+    }
+
+    return text;
   }
 }
