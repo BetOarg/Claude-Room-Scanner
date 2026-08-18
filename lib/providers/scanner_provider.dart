@@ -193,6 +193,7 @@ class ScannerProvider extends ChangeNotifier {
     ARPoint location, {
     double? widthMeters,
     ARPoint? endLocation,
+    int? preferredWallIndex,
   }) {
     final room =
         _currentRoom;
@@ -253,9 +254,21 @@ class ScannerProvider extends ChangeNotifier {
         ? points.length
         : points.length - 1;
 
+    if (preferredWallIndex != null &&
+        (preferredWallIndex < 0 ||
+            preferredWallIndex >= wallCount)) {
+      return ValidationResult.invalid(
+        'La pared seleccionada no es válida.',
+      );
+    }
+
     for (int index = 0;
         index < wallCount;
         index++) {
+      if (preferredWallIndex != null &&
+          index != preferredWallIndex) {
+        continue;
+      }
       final start =
           points[index];
 
@@ -384,8 +397,7 @@ class ScannerProvider extends ChangeNotifier {
         secondT,
       ).toDouble();
 
-      measuredWidth =
-          (endT - startT) *
+      measuredWidth =          (endT - startT) *
               wallLength;
 
       if (measuredWidth <
