@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:camera/camera.dart';
@@ -42,6 +43,11 @@ class BasicScannerScreen extends StatefulWidget {
 class _BasicScannerScreenState
     extends State<BasicScannerScreen>
     with WidgetsBindingObserver {
+  static const Duration _cameraInitializationTimeout =
+      Duration(seconds: 12);
+  static const Duration _automaticRetryDelay =
+      Duration(milliseconds: 800);
+
   CameraController? _cameraController;
 
   final BasicScannerAdapter _scannerAdapter =
@@ -59,6 +65,9 @@ class _BasicScannerScreenState
   bool _processing = false;
   bool _changingLifecycle = false;
   bool _shouldResumeCamera = false;
+  bool _initializationInProgress = false;
+  bool _scannerInitialized = false;
+  bool _roomStarted = false;
 
   double _lastAngleDegrees = 90.0;
 
@@ -80,7 +89,25 @@ class _BasicScannerScreenState
     });
   }
 
-  Future<void> _initialize() async {
+  Future<void> _initialize({
+    bool allowAutomaticRetry = true,
+  }) async {
+    if (_initializationInProgress) {
+      return;
+    }
+
+    _initializationInProgress = true;
+
+    if (mounted) {
+      setState(() {
+        _initializing = true;
+        _cameraReady = false;
+        _initializationError = null;
+      });
+    }
+
+    CameraController? controller;
+
     try {
       final permissionGranted =
           await _permissionService
@@ -95,33 +122,43 @@ class _BasicScannerScreenState
         );
       }
 
-      final cameras =
-          await availableCameras();
+      final maximumAttempts =
+          allowAutomaticRetry ? 2 : 1;
+      Object? lastError;
 
-      if (cameras.isEmpty) {
+      for (var attempt = 0;
+          attempt < maximumAttempts;
+          attempt++) {
+        try {
+          controller =
+              await _createInitializedCameraController();
+          lastError = null;
+          break;
+        } catch (error) {
+          lastError = error;
+
+          if (attempt + 1 < maximumAttempts) {
+            await Future<void>.delayed(
+              _automaticRetryDelay,
+            );
+          }
+        }
+      }
+
+      if (controller == null) {
+        if (lastError != null) {
+          throw lastError;
+        }
+
         throw StateError(
-          'El dispositivo no tiene una cámara disponible.',
+          'No se pudo iniciar la cámara.',
         );
       }
 
-      final selectedCamera =
-          cameras.firstWhere(
-        (camera) =>
-            camera.lensDirection ==
-            CameraLensDirection.back,
-        orElse: () => cameras.first,
-      );
-
-      final controller =
-          CameraController(
-        selectedCamera,
-        ResolutionPreset.medium,
-        enableAudio: false,
-      );
-
-      await controller.initialize();
-
-      await _scannerAdapter.initialize();
+      if (!_scannerInitialized) {
+        await _scannerAdapter.initialize();
+        _scannerInitialized = true;
+      }
 
       if (!mounted) {
         await controller.dispose();
@@ -131,9 +168,12 @@ class _BasicScannerScreenState
       final scannerProvider =
           context.read<ScannerProvider>();
 
-      _startScannerRoom(
-        scannerProvider,
-      );
+      if (!_roomStarted) {
+        _startScannerRoom(
+          scannerProvider,
+        );
+        _roomStarted = true;
+      }
 
       scannerProvider.updateTrackingStatus(true);
 
@@ -142,8 +182,11 @@ class _BasicScannerScreenState
             controller;
         _cameraReady = true;
         _initializing = false;
+        _initializationError = null;
       });
     } catch (error) {
+      await controller?.dispose();
+
       if (!mounted) {
         return;
       }
@@ -152,13 +195,72 @@ class _BasicScannerScreenState
         _initializing = false;
         _cameraReady = false;
         _initializationError =
-            error.toString();
+            _cameraErrorMessage(error);
       });
 
       context
           .read<ScannerProvider>()
           .updateTrackingStatus(false);
+    } finally {
+      _initializationInProgress = false;
     }
+  }
+
+  Future<CameraController>
+      _createInitializedCameraController() async {
+    final cameras = await availableCameras().timeout(
+      _cameraInitializationTimeout,
+    );
+
+    if (cameras.isEmpty) {
+      throw StateError(
+        'El dispositivo no tiene una cámara disponible.',
+      );
+    }
+
+    final selectedCamera =
+        cameras.firstWhere(
+      (camera) =>
+          camera.lensDirection ==
+          CameraLensDirection.back,
+      orElse: () => cameras.first,
+    );
+
+    final controller =
+        CameraController(
+      selectedCamera,
+      ResolutionPreset.medium,
+      enableAudio: false,
+    );
+
+    try {
+      await controller.initialize().timeout(
+        _cameraInitializationTimeout,
+      );
+      return controller;
+    } catch (_) {
+      await controller.dispose();
+      rethrow;
+    }
+  }
+
+  String _cameraErrorMessage(
+    Object? error,
+  ) {
+    if (error is TimeoutException) {
+      return 'La cámara tardó demasiado en responder. '
+          'Podés intentar iniciarla nuevamente.';
+    }
+
+    final message =
+        error?.toString();
+
+    if (message == null ||
+        message.isEmpty) {
+      return 'No se pudo iniciar la cámara.';
+    }
+
+    return message;
   }
 
   void _startScannerRoom(
@@ -278,31 +380,8 @@ class _BasicScannerScreenState
     _changingLifecycle = true;
 
     try {
-      final cameras =
-          await availableCameras();
-
-      if (cameras.isEmpty) {
-        throw StateError(
-          'El dispositivo no tiene una cámara disponible.',
-        );
-      }
-
-      final selectedCamera =
-          cameras.firstWhere(
-        (camera) =>
-            camera.lensDirection ==
-            CameraLensDirection.back,
-        orElse: () => cameras.first,
-      );
-
       final controller =
-          CameraController(
-        selectedCamera,
-        ResolutionPreset.medium,
-        enableAudio: false,
-      );
-
-      await controller.initialize();
+          await _createInitializedCameraController();
 
       if (!mounted ||
           !_shouldResumeCamera) {
@@ -463,12 +542,15 @@ class _BasicScannerScreenState
                 height: 24,
               ),
               ElevatedButton.icon(
-                onPressed: _initialize,
+                onPressed: () =>
+                    _initialize(
+                  allowAutomaticRetry: false,
+                ),
                 icon: const Icon(
                   Icons.refresh,
                 ),
                 label: const Text(
-                  'Reintentar',
+                  'Reintentar cámara',
                 ),
               ),
             ],
@@ -515,8 +597,7 @@ class _BasicScannerScreenState
     final room = provider.currentRoom;
     final points =
         room?.points ?? const <ARPoint>[];
-    final features =
-        room?.features ?? const <WallFeature>[];
+    final features =        room?.features ?? const <WallFeature>[];
 
     return IgnorePointer(
       child: CustomPaint(
@@ -1115,8 +1196,7 @@ class _BasicScannerScreenState
           child: _modeButton(
             BasicAppMode.door,
             Icons.door_front_door,
-            l10n.door,
-          ),
+            l10n.door,          ),
         ),
         const SizedBox(
           width: 6,
@@ -1715,8 +1795,7 @@ class _BasicScannerScreenState
   ) {
     return showDialog<int>(
       context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
+      builder: (dialogContext) {        return AlertDialog(
           title: const Text(
             '¿En qué pared está la abertura?',
           ),
@@ -2315,8 +2394,7 @@ class _BasicScannerScreenState
           backgroundColor:
               Colors.red.shade800,          duration:
               const Duration(
-            seconds: 4,
-          ),
+            seconds: 4,          ),
           content: Row(
             children: [
               const Icon(
