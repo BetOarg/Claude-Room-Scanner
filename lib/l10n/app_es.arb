@@ -35,5 +35,23 @@
   "addCorner": "AÑADIR ESQUINA",
   "markSecondEnd": "MARCAR SEGUNDO EXTREMO",
   "measureDoor": "MEDIR PUERTA",
-  "measureWindow": "MEDIR VENTANA"
+  "measureWindow": "MEDIR VENTANA",
+  "preparingCamera": "Preparando cámara...",
+  "basicScanner": "Escáner básico",
+  "cameraStartFailed": "No se pudo iniciar la cámara",
+  "unknownError": "Error desconocido.",
+  "retryCamera": "Reintentar cámara",
+  "cameraPermissionRequired": "El permiso de cámara es necesario para utilizar el Escáner básico.",
+  "cameraUnavailable": "El dispositivo no tiene una cámara disponible.",
+  "cameraTimeoutMessage": "La cámara tardó demasiado en responder. Podés intentar iniciarla nuevamente.",
+  "closeRoom": "Cerrar ambiente",
+  "smartCloseMessage": "La medición termina a {distance} metros del punto inicial. ¿Querés ajustar el cierre exactamente al inicio?",
+  "@smartCloseMessage": {
+    "placeholders": {
+      "distance": {
+        "type": "String"
+      }
+    }
+  },
+  "continueMeasuring": "Continuar midiendo"
 }
