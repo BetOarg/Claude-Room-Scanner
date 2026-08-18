@@ -85,6 +85,9 @@ class IsarWallFeature {
 
   @enumerated
   IsarDoorSwingSide doorSwingSide = IsarDoorSwingSide.left;
+
+  double? openingHeightMeters;
+  double? sillHeightMeters;
 }
 
 enum IsarFeatureType { door, window }
@@ -115,7 +118,9 @@ extension WallFeatureIsarMapper on WallFeature {
           : IsarDoorHingeSide.end
       ..doorSwingSide = doorSwingSide == DoorSwingSide.left
           ? IsarDoorSwingSide.left
-          : IsarDoorSwingSide.right;
+          : IsarDoorSwingSide.right
+      ..openingHeightMeters = openingHeightMeters
+      ..sillHeightMeters = sillHeightMeters;
   }
 }
 
@@ -132,6 +137,8 @@ extension IsarWallFeatureMapper on IsarWallFeature {
       doorSwingSide: doorSwingSide == IsarDoorSwingSide.left
           ? DoorSwingSide.left
           : DoorSwingSide.right,
+      openingHeightMeters: openingHeightMeters,
+      sillHeightMeters: sillHeightMeters,
     );
   }
 }
