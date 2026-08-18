@@ -123,5 +123,10 @@
   "left": "Left",
   "featureDoesNotCreateCorner": "This does not create a new room corner.",
   "positionValidatedBeforeAdding": "The new position is validated before it is added to the floor plan.",
-  "useMeasurement": "Use measurement"
+  "useMeasurement": "Use measurement",
+  "measurementSystem": "Measurement system",
+  "metricSystem": "Meters",
+  "imperialSystem": "Feet and inches",
+  "feet": "Feet",
+  "inches": "Inches"
 }
