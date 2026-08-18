@@ -35,5 +35,23 @@
   "addCorner": "ADD CORNER",
   "markSecondEnd": "MARK SECOND END",
   "measureDoor": "MEASURE DOOR",
-  "measureWindow": "MEASURE WINDOW"
+  "measureWindow": "MEASURE WINDOW",
+  "preparingCamera": "Preparing camera...",
+  "basicScanner": "Basic scanner",
+  "cameraStartFailed": "The camera could not be started",
+  "unknownError": "Unknown error.",
+  "retryCamera": "Retry camera",
+  "cameraPermissionRequired": "Camera permission is required to use the Basic scanner.",
+  "cameraUnavailable": "The device does not have an available camera.",
+  "cameraTimeoutMessage": "The camera took too long to respond. You can try starting it again.",
+  "closeRoom": "Close room",
+  "smartCloseMessage": "The measurement ends {distance} meters from the starting point. Do you want to adjust the closure exactly to the starting point?",
+  "@smartCloseMessage": {
+    "placeholders": {
+      "distance": {
+        "type": "String"
+      }
+    }
+  },
+  "continueMeasuring": "Continue measuring"
 }
