@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -496,7 +498,6 @@ class _FloorPlanViewerScreenState
     double value,
   ) {
     var formatted = value.toStringAsFixed(2);
-
     while (formatted.contains('.') &&
         formatted.endsWith('0')) {
       formatted = formatted.substring(
@@ -854,6 +855,11 @@ class _FloorPlanViewerScreenState
                               area,
                               measurementSystem,
                             ),
+                            formatLength: (length) =>
+                                _formatLength(
+                              length,
+                              measurementSystem,
+                            ),
                           ),
                         ),
                       ),
@@ -990,8 +996,7 @@ class _FloorPlanViewerScreenState
                   'Agregar elemento',
                 ),
                 subtitle: Text(
-                  'Seleccioná el elemento '
-                  'que querés incorporar.',
+                  'Seleccioná el elemento '                  'que querés incorporar.',
                 ),
               ),
               const Divider(
@@ -1490,7 +1495,6 @@ enum _FloorPlanAction {
   shareJson,
   exportPdf,
 }
-
 enum _RoomListActionType {
   editMeasurements,
   rename,
@@ -1670,11 +1674,14 @@ class FloorPlanPainter
   final String? selectedFeatureId;
   final String Function(double)
       formatArea;
+  final String Function(double)
+      formatLength;
 
   const FloorPlanPainter({
     required this.rooms,
     required this.transform,
     required this.formatArea,
+    required this.formatLength,
     this.selectedRoomId,
     this.selectedFeatureId,
   });
@@ -1777,6 +1784,11 @@ class FloorPlanPainter
         windowPaint,
         selectedPaint,
         referencePaint,
+      );
+
+      _drawWallDimensions(
+        canvas,
+        room,
       );
     }
   }
@@ -1961,6 +1973,174 @@ class FloorPlanPainter
             textPainter.height / 2,
       ),
     );
+  }
+
+  // ===========================================================================
+  // COTAS DE PAREDES
+  // ===========================================================================
+
+  void _drawWallDimensions(
+    Canvas canvas,
+    RoomModel room,
+  ) {
+    if (room.points.length < 3) {
+      return;
+    }
+
+    final screenPoints = room.points
+        .map(transform)
+        .toList(growable: false);
+    final signedArea =
+        _screenSignedArea(screenPoints);
+
+    if (signedArea.abs() < 0.000001) {
+      return;    }
+
+    final dimensionPaint = Paint()
+      ..color = const Color(0xFF174EA6)
+      ..strokeWidth = 1.2
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.square;
+    final backgroundPaint = Paint()
+      ..color = Colors.white.withValues(
+        alpha: 0.94,
+      )
+      ..style = PaintingStyle.fill;
+
+    for (var index = 0;
+        index < room.points.length;
+        index++) {
+      final nextIndex =
+          (index + 1) % room.points.length;
+      final start = screenPoints[index];
+      final end = screenPoints[nextIndex];
+      final direction = end - start;
+      final screenLength = direction.distance;
+
+      if (screenLength < 30) {
+        continue;
+      }
+
+      final tangent = direction / screenLength;
+      final outwardNormal = signedArea > 0
+          ? Offset(tangent.dy, -tangent.dx)
+          : Offset(-tangent.dy, tangent.dx);
+      const dimensionOffset = 19.0;
+      const extensionStartOffset = 5.0;
+      const extensionEndOffset = 24.0;
+      const endMarkHalfLength = 4.0;
+      final dimensionStart =
+          start + outwardNormal * dimensionOffset;
+      final dimensionEnd =
+          end + outwardNormal * dimensionOffset;
+
+      canvas.drawLine(
+        start + outwardNormal * extensionStartOffset,
+        start + outwardNormal * extensionEndOffset,
+        dimensionPaint,
+      );
+      canvas.drawLine(
+        end + outwardNormal * extensionStartOffset,
+        end + outwardNormal * extensionEndOffset,
+        dimensionPaint,
+      );
+      canvas.drawLine(
+        dimensionStart,
+        dimensionEnd,
+        dimensionPaint,
+      );
+      canvas.drawLine(
+        dimensionStart -
+            outwardNormal * endMarkHalfLength,
+        dimensionStart +
+            outwardNormal * endMarkHalfLength,
+        dimensionPaint,
+      );
+      canvas.drawLine(
+        dimensionEnd -
+            outwardNormal * endMarkHalfLength,
+        dimensionEnd +
+            outwardNormal * endMarkHalfLength,
+        dimensionPaint,
+      );
+
+      final wallLength =
+          GeometryService.calculateDistance(
+        room.points[index],
+        room.points[nextIndex],
+      );
+      final textPainter = TextPainter(
+        text: TextSpan(
+          text: formatLength(wallLength),
+          style: const TextStyle(
+            color: Color(0xFF174EA6),
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        textAlign: TextAlign.center,
+        textDirection: TextDirection.ltr,
+        maxLines: 1,
+      )..layout();
+      final center = Offset(
+        (dimensionStart.dx + dimensionEnd.dx) / 2,
+        (dimensionStart.dy + dimensionEnd.dy) / 2,
+      );
+      var angle = math.atan2(
+        tangent.dy,
+        tangent.dx,
+      );
+
+      if (angle > math.pi / 2 ||
+          angle < -math.pi / 2) {
+        angle += math.pi;
+      }
+
+      canvas.save();
+      canvas.translate(center.dx, center.dy);
+      canvas.rotate(angle);
+
+      final backgroundRect = Rect.fromCenter(
+        center: Offset.zero,
+        width: textPainter.width + 8,
+        height: textPainter.height + 4,
+      );
+
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          backgroundRect,
+          const Radius.circular(4),
+        ),
+        backgroundPaint,
+      );
+      textPainter.paint(
+        canvas,
+        Offset(
+          -textPainter.width / 2,
+          -textPainter.height / 2,
+        ),
+      );
+      canvas.restore();
+    }
+  }
+
+  double _screenSignedArea(
+    List<Offset> points,
+  ) {
+    var area = 0.0;
+
+    for (var index = 0;
+        index < points.length;
+        index++) {
+      final nextIndex =
+          (index + 1) % points.length;
+      area += points[index].dx *
+              points[nextIndex].dy -
+          points[nextIndex].dx *
+              points[index].dy;
+    }
+
+    return area / 2;
   }
 
   // ===========================================================================
