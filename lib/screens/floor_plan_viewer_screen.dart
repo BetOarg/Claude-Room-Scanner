@@ -465,12 +465,24 @@ class _FloorPlanViewerScreenState
         placement.distanceFromWallStartMeters,
       ),
     );
+    final heightMetricController = TextEditingController(
+      text: _formatDecimal(placement.openingHeightMeters),
+    );
+    final sillMetricController = TextEditingController(
+      text: _formatDecimal(placement.sillHeightMeters),
+    );
     final widthImperial = MeasurementUnits.metersToFeetAndInches(
       placement.widthMeters,
     );
     final positionImperial =
         MeasurementUnits.metersToFeetAndInches(
       placement.distanceFromWallStartMeters,
+    );
+    final heightImperial = MeasurementUnits.metersToFeetAndInches(
+      placement.openingHeightMeters,
+    );
+    final sillImperial = MeasurementUnits.metersToFeetAndInches(
+      placement.sillHeightMeters,
     );
     final widthFeetController = TextEditingController(
       text: widthImperial.feet.toString(),
@@ -483,6 +495,18 @@ class _FloorPlanViewerScreenState
     );
     final positionInchesController = TextEditingController(
       text: _formatDecimal(positionImperial.inches),
+    );
+    final heightFeetController = TextEditingController(
+      text: heightImperial.feet.toString(),
+    );
+    final heightInchesController = TextEditingController(
+      text: _formatDecimal(heightImperial.inches),
+    );
+    final sillFeetController = TextEditingController(
+      text: sillImperial.feet.toString(),
+    );
+    final sillInchesController = TextEditingController(
+      text: _formatDecimal(sillImperial.inches),
     );
 
     double? readLength({
@@ -573,8 +597,7 @@ class _FloorPlanViewerScreenState
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      '${localizations.wallLength}: '
+                    Text(                      '${localizations.wallLength}: '
                       '${_formatLength(placement.wallLengthMeters, measurementSystem)}',
                     ),
                     const SizedBox(height: 16),
@@ -591,6 +614,23 @@ class _FloorPlanViewerScreenState
                       feet: positionFeetController,
                       inches: positionInchesController,
                     ),
+                    const SizedBox(height: 16),
+                    lengthFields(
+                      label: localizations.openingHeight,
+                      metric: heightMetricController,
+                      feet: heightFeetController,
+                      inches: heightInchesController,
+                    ),
+                    if (selection.feature.type ==
+                        FeatureType.window) ...[
+                      const SizedBox(height: 16),
+                      lengthFields(
+                        label: localizations.sillHeight,
+                        metric: sillMetricController,
+                        feet: sillFeetController,
+                        inches: sillInchesController,
+                      ),
+                    ],
                     if (validationMessage != null) ...[
                       const SizedBox(height: 12),
                       Text(
@@ -617,8 +657,24 @@ class _FloorPlanViewerScreenState
                       feet: positionFeetController,
                       inches: positionInchesController,
                     );
+                    final height = readLength(
+                      metric: heightMetricController,
+                      feet: heightFeetController,
+                      inches: heightInchesController,
+                    );
+                    final sill = selection.feature.type ==
+                            FeatureType.window
+                        ? readLength(
+                            metric: sillMetricController,
+                            feet: sillFeetController,
+                            inches: sillInchesController,
+                          )
+                        : 0.0;
 
-                    if (width == null || position == null) {
+                    if (width == null ||
+                        position == null ||
+                        height == null ||
+                        sill == null) {
                       setDialogState(() {
                         validationMessage =
                             localizations.invalidOpeningMeasurement;
@@ -631,6 +687,8 @@ class _FloorPlanViewerScreenState
                       _OpeningGeometryInput(
                         widthMeters: width,
                         distanceFromWallStartMeters: position,
+                        openingHeightMeters: height,
+                        sillHeightMeters: sill,
                       ),
                     );
                   },
@@ -649,6 +707,12 @@ class _FloorPlanViewerScreenState
     widthInchesController.dispose();
     positionFeetController.dispose();
     positionInchesController.dispose();
+    heightMetricController.dispose();
+    sillMetricController.dispose();
+    heightFeetController.dispose();
+    heightInchesController.dispose();
+    sillFeetController.dispose();
+    sillInchesController.dispose();
 
     if (!mounted || input == null) return;
 
@@ -658,6 +722,8 @@ class _FloorPlanViewerScreenState
       widthMeters: input.widthMeters,
       distanceFromWallStartMeters:
           input.distanceFromWallStartMeters,
+      openingHeightMeters: input.openingHeightMeters,
+      sillHeightMeters: input.sillHeightMeters,
     );
 
     if (!mounted) return;
@@ -1130,8 +1196,7 @@ class _FloorPlanViewerScreenState
 
                         final planePoint =
                             _inverseTransform(
-                          details
-                              .localPosition,
+                          details                              .localPosition,
                         );
 
                         final roomId =
@@ -1730,8 +1795,7 @@ class _FloorPlanViewerScreenState
             },
           ),
           actions: [
-            TextButton(
-              onPressed: () {
+            TextButton(              onPressed: () {
                 Navigator.pop(
                   dialogContext,
                 );
@@ -1835,10 +1899,14 @@ enum _FeatureMenuAction {
 class _OpeningGeometryInput {
   final double widthMeters;
   final double distanceFromWallStartMeters;
+  final double openingHeightMeters;
+  final double sillHeightMeters;
 
   const _OpeningGeometryInput({
     required this.widthMeters,
     required this.distanceFromWallStartMeters,
+    required this.openingHeightMeters,
+    required this.sillHeightMeters,
   });
 }
 
@@ -2326,8 +2394,7 @@ class FloorPlanPainter
     );
   }
 
-  // ===========================================================================
-  // COTAS DE PAREDES
+  // ===========================================================================  // COTAS DE PAREDES
   // ===========================================================================
 
   void _drawWallDimensions(
@@ -2926,8 +2993,7 @@ class FloorPlanPainter
         (fromStart.dx * segment.dx +
                 fromStart.dy * segment.dy) /
             lengthSquared;
-    final clampedProjection =
-        projection.clamp(0.0, 1.0).toDouble();
+    final clampedProjection =        projection.clamp(0.0, 1.0).toDouble();
     final closest = Offset(
       start.dx + segment.dx * clampedProjection,
       start.dy + segment.dy * clampedProjection,
