@@ -23,14 +23,18 @@ void main() async {
     anonKey: SupabaseConfig.supabaseAnonKey,
   );
 
+  final measurementSettingsProvider =
+      MeasurementSettingsProvider();
+  await measurementSettingsProvider.load();
+
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => ProjectProvider()),
         ChangeNotifierProvider(create: (_) => ScannerProvider()),
-        ChangeNotifierProvider(
-          create: (_) =>
-              MeasurementSettingsProvider(),
+        ChangeNotifierProvider.value(
+          value:
+              measurementSettingsProvider,
         ),
         // FloorPlanProvider es el estado en memoria del proyecto abierto;
         // se conecta aquí a ProjectProvider (Isar) como su única vía de
