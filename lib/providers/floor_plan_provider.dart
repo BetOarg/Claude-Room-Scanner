@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import '../models/room_model.dart';
 import '../services/geometry_service.dart';
+import '../utils/measurement_units.dart';
 import '../utils/scan_validator.dart';
 
 typedef ProjectPersister = Future<void> Function({
@@ -14,6 +15,9 @@ typedef ProjectPersister = Future<void> Function({
 
 class FloorPlanProvider extends ChangeNotifier {
   static const double _defaultRoomSpacing = 1.0;
+
+  MeasurementSystem measurementSystem =
+      MeasurementSystem.metric;
 
   String? _projectUuid;
 
@@ -544,7 +548,6 @@ class FloorPlanProvider extends ChangeNotifier {
     if (!projectMinZ.isFinite) {
       projectMinZ = 0.0;
     }
-
     double roomMinX =
         double.infinity;
 
@@ -1074,7 +1077,7 @@ class FloorPlanProvider extends ChangeNotifier {
         return _FeatureRemapResult(
           errorMessage:
               'La nueva pared es más corta que una puerta o ventana '
-              'de ${featureWidth.toStringAsFixed(2)} m.',
+              'de ${_formatLength(featureWidth)}.',
         );
       }
 
@@ -1094,7 +1097,6 @@ class FloorPlanProvider extends ChangeNotifier {
                 maximumStartT,
               )
               .toDouble();
-
       final endT =
           startT +
               featureFraction;
@@ -1129,6 +1131,19 @@ class FloorPlanProvider extends ChangeNotifier {
 
     return _FeatureRemapResult(
       features: remapped,
+    );
+  }
+
+  String _formatLength(
+    double meters,
+  ) {
+    return MeasurementUnits.formatLength(
+      meters,
+      measurementSystem,
+      metersLabel: 'metros',
+      feetLabel: 'pies',
+      inchesLabel: 'pulgadas',
+      decimalSeparator: ',',
     );
   }
 
