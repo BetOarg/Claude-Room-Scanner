@@ -418,7 +418,10 @@ class _BasicScannerScreenState
         _cameraReady = false;
         _initializing = false;
         _initializationError =
-            'No se pudo reanudar la cámara: $error';
+            AppLocalizations.of(context)!
+                .cameraResumeFailed(
+              error.toString(),
+            );
       });
 
       context
@@ -594,8 +597,7 @@ class _BasicScannerScreenState
                       .size
                       .width,
           height:              controller.value.previewSize?.width ??
-                  MediaQuery.of(context)
-                      .size
+                  MediaQuery.of(context)                      .size
                       .height,
           child: CameraPreview(            controller,
           ),
@@ -709,17 +711,17 @@ class _BasicScannerScreenState
                 ),
                 borderRadius: BorderRadius.circular(14),
               ),
-              child: const Row(
+              child: Row(
                 children: [
-                  Icon(
+                  const Icon(
                     Icons.add_road_rounded,
                     color: Colors.white,
                   ),
-                  SizedBox(width: 10),
+                  const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      'Continuación desde una abertura',
-                      style: TextStyle(
+                      l10n.continuationFromOpening,
+                      style: const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
                       ),
@@ -769,9 +771,9 @@ class _BasicScannerScreenState
                   child: Text(
                     count == 0
                         ? continuation != null
-                            ? 'Desde el punto verde, medí la distancia hasta la primera esquina real del ambiente.'
-                            : 'Marcá el punto inicial de la habitación.'
-                        : 'Medí la distancia hasta la próxima esquina y elegí su dirección.',
+                            ? l10n.continuationFirstCornerInstruction
+                            : l10n.markRoomStartingPoint
+                        : l10n.measureNextCornerInstruction,
                     style:
                         const TextStyle(
                       color:
@@ -1194,8 +1196,7 @@ class _BasicScannerScreenState
     final l10n =        AppLocalizations.of(context)!;
     return Row(
       children: [
-        Expanded(
-          child: _modeButton(
+        Expanded(          child: _modeButton(
             BasicAppMode.wall,            Icons.wallpaper,
             l10n.wall,
           ),
@@ -1318,6 +1319,9 @@ class _BasicScannerScreenState
   Widget _buildProgressIndicator(
     int count,
   ) {
+    final l10n =
+        AppLocalizations.of(context)!;
+
     return Row(
       children: [
         const Icon(
@@ -1335,8 +1339,10 @@ class _BasicScannerScreenState
             children: [
               Text(
                 count == 0
-                    ? 'Inicio del trazado'
-                    : 'Esquina $count registrada',
+                    ? l10n.traceStarted
+                    : l10n.cornerRegistered(
+                        count,
+                      ),
                 style:
                     const TextStyle(
                   color: Colors.white,
@@ -1350,8 +1356,8 @@ class _BasicScannerScreenState
               ),
               Text(
                 count < 3
-                    ? 'Necesitás al menos 3 esquinas para cerrar.'
-                    : 'Podés seguir agregando esquinas o cerrar.',
+                    ? l10n.needThreeCornersToClose
+                    : l10n.canContinueOrClose,
                 style:
                     const TextStyle(
                   color: Colors.white54,
@@ -1368,6 +1374,9 @@ class _BasicScannerScreenState
   Widget _buildUndoButton(
     ScannerProvider provider,
   ) {
+    final l10n =
+        AppLocalizations.of(context)!;
+
     final enabled =
         provider.currentPointsCount >
             _protectedInitialPointCount;
@@ -1388,7 +1397,7 @@ class _BasicScannerScreenState
                     .removeLastPoint();
 
                 _showMessage(
-                  'Última esquina eliminada.',
+                  l10n.lastCornerRemoved,
                 );
               }
             : null,
@@ -1425,7 +1434,7 @@ class _BasicScannerScreenState
     } else if (count == 0) {
       label = widget.continuationReference == null
           ? l10n.markStart
-          : 'Medir primera esquina';
+          : l10n.measureFirstCorner;
     } else if (_currentMode ==
         BasicAppMode.wall) {
       label = l10n.measureNextCorner;
@@ -1527,6 +1536,9 @@ class _BasicScannerScreenState
   Future<void> _capturePressed(
     ScannerProvider provider,
   ) async {
+    final l10n =
+        AppLocalizations.of(context)!;
+
     if (_processing) {
       return;    }
     HapticFeedback.lightImpact();
@@ -1535,7 +1547,7 @@ class _BasicScannerScreenState
       if (widget.continuationReference != null) {
         if (_currentMode != BasicAppMode.wall) {
           _showMessage(
-            'Primero medí la primera esquina real del ambiente.',
+            l10n.measureFirstCornerBeforeFeatures,
           );
           return;
         }
@@ -1563,13 +1575,13 @@ class _BasicScannerScreenState
 
         _showValidationError(
           result.errorMessage ??
-              'No se pudo agregar el inicio.',
+              l10n.couldNotAddStart,
         );
         return;
       }
 
       _showMessage(
-        'Inicio marcado. Ahora medí la primera pared.',
+        l10n.startMarked,
       );
 
       return;
@@ -1590,6 +1602,9 @@ class _BasicScannerScreenState
   Future<void> _captureWallPoint(
     ScannerProvider provider,
   ) async {
+    final l10n =
+        AppLocalizations.of(context)!;
+
     final isFirstContinuationCorner =
         widget.continuationReference != null &&
             provider.currentPointsCount == 0;
@@ -1622,7 +1637,7 @@ class _BasicScannerScreenState
 
       if (candidate == null) {
         _showMessage(
-          'No se pudo calcular la nueva esquina.',
+          l10n.couldNotCalculateCorner,
         );
         return;
       }
@@ -1667,7 +1682,7 @@ class _BasicScannerScreenState
 
         _showValidationError(
           result.errorMessage ??
-              'La esquina no es válida.',
+              l10n.invalidCorner,
         );
 
         return;
@@ -1680,7 +1695,7 @@ class _BasicScannerScreenState
 
       if (isFirstContinuationCorner) {
         _showMessage(
-          'Primera esquina registrada. Continuá midiendo las paredes del ambiente.',
+          l10n.firstCornerRegistered,
         );
       }
 
@@ -1695,7 +1710,9 @@ class _BasicScannerScreenState
           .cancelPendingMeasurement();
 
       _showMessage(
-        'No se pudo registrar la medición: $error',
+        l10n.measurementRegistrationFailed(
+          error.toString(),
+        ),
       );
     } finally {
       if (mounted) {
@@ -1778,8 +1795,7 @@ class _BasicScannerScreenState
               l10n.closeRoom,
             ),
           ),
-        ],
-      ),
+        ],      ),
     );
 
     return confirmed ?? false;
@@ -2378,8 +2394,7 @@ class _BasicScannerScreenState
       onPressed: () {
         controller.text = _formatAngle(value);
 
-        setDialogState(() {});
-      },
+        setDialogState(() {});      },
     );
   }
 
@@ -2978,8 +2993,7 @@ class _ScannerGuidePainter
       size.height / 2,
     );
 
-    final paint =
-        Paint()
+    final paint =        Paint()
           ..style =
               PaintingStyle.stroke
           ..strokeWidth = 2;
