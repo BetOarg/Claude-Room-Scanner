@@ -17,6 +17,13 @@ void main() {
       );
     });
 
+    test('convierte metros cuadrados a pies cuadrados', () {
+      expect(
+        MeasurementUnits.squareMetersToSquareFeet(1),
+        closeTo(10.76391042, 0.0000001),
+      );
+    });
+
     test('convierte pies y pulgadas a metros', () {
       expect(
         MeasurementUnits.feetAndInchesToMeters(
