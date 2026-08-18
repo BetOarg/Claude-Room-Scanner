@@ -130,5 +130,7 @@
   "feet": "Pies",
   "inches": "Pulgadas",
   "squareMeters": "metros cuadrados",
-  "squareFeet": "pies cuadrados"
+  "squareFeet": "pies cuadrados",
+  "changeDoorHingeSide": "Cambiar lado de la bisagra",
+  "changeDoorOpeningDirection": "Cambiar sentido de apertura"
 }
