@@ -190,6 +190,30 @@ class BasicScannerAdapter implements ScannerAdapter {
     return point;
   }
 
+  /// Sincroniza el adaptador y crea el origen de un escaneo normal.
+  ///
+  /// El Scanner Básico puede reanudar la cámara después de abrir el plano o
+  /// después de un cambio de ciclo de vida. Si el proveedor todavía no tiene
+  /// esquinas, el origen debe prevalecer sobre cualquier historial pendiente.
+  ScannerPoint captureInitialPoint() {
+    _initialized = true;
+    _tracking = true;
+
+    reset();
+
+    const point = ScannerPoint(
+      x: 0.0,
+      y: 0.0,
+      z: 0.0,
+      accuracy: 0.0,
+      source: PointSource.camera,
+    );
+
+    commitPendingPoint(point);
+
+    return point;
+  }
+
   /// Elimina la última esquina confirmada.
   ///
   /// Se utiliza junto con ScannerProvider.removeLastPoint().
