@@ -537,8 +537,7 @@ class _FloorPlanViewerScreenState
       MaterialPageRoute(
         builder: (_) =>
             MeasurementEditorScreen(
-          roomId: roomId,
-        ),
+          roomId: roomId,        ),
       ),
     );
   }
@@ -1077,8 +1076,7 @@ class _FloorPlanViewerScreenState
       _showRoomListDialog() async {
     final action =
         await showModalBottomSheet<
-            _RoomListAction>(
-      context: context,
+            _RoomListAction>(      context: context,
       isScrollControlled: true,
       builder: (
         bottomSheetContext,
@@ -1617,8 +1615,7 @@ class _EmptyPlanView extends StatelessWidget {
     BuildContext context,
   ) {
     return const Center(
-      child: Padding(
-        padding: EdgeInsets.all(24),
+      child: Padding(        padding: EdgeInsets.all(24),
         child: Column(
           mainAxisSize:
               MainAxisSize.min,
@@ -2157,8 +2154,7 @@ class FloorPlanPainter
     RoomModel room,
     Set<String> dimensionedFeatureIds,
   ) {
-    if (room.points.length < 3 ||
-        room.features.isEmpty) {
+    if (room.points.length < 3 ||        room.features.isEmpty) {
       return;
     }
 
@@ -2342,7 +2338,200 @@ class FloorPlanPainter
         ),
       );
       canvas.restore();
+
+      final wallStartPoint =
+          room.points[wallIndex];
+      final wallEndPoint =
+          room.points[nextWallIndex];
+      final wallDx =
+          wallEndPoint.x - wallStartPoint.x;
+      final wallDz =
+          wallEndPoint.z - wallStartPoint.z;
+      final wallLengthSquared =
+          wallDx * wallDx + wallDz * wallDz;
+
+      if (wallLengthSquared <= 0.000001) {
+        continue;
+      }
+
+      double projectionFor(
+        ARPoint point,
+      ) {
+        return (((point.x - wallStartPoint.x) *
+                        wallDx +
+                    (point.z - wallStartPoint.z) *
+                        wallDz) /
+                wallLengthSquared)
+            .clamp(0.0, 1.0)
+            .toDouble();
+      }
+
+      final firstProjection =
+          projectionFor(feature.start);
+      final secondProjection =
+          projectionFor(feature.end);
+      final openingStartProjection =
+          math.min(
+        firstProjection,
+        secondProjection,
+      );
+      final openingEndProjection =
+          math.max(
+        firstProjection,
+        secondProjection,
+      );
+      final wallLength =
+          math.sqrt(wallLengthSquared);
+      final openingStartOnWall =
+          roomScreenPoints[wallIndex] +
+              wallDirection *
+                  openingStartProjection;
+      final openingEndOnWall =
+          roomScreenPoints[wallIndex] +
+              wallDirection *
+                  openingEndProjection;
+
+      _drawCornerDistanceDimension(
+        canvas: canvas,
+        start: roomScreenPoints[wallIndex],
+        end: openingStartOnWall,
+        tangent: wallTangent,
+        inwardNormal: inwardNormal,
+        distanceMeters:
+            wallLength * openingStartProjection,
+      );
+      _drawCornerDistanceDimension(
+        canvas: canvas,
+        start: openingEndOnWall,
+        end: roomScreenPoints[nextWallIndex],
+        tangent: wallTangent,
+        inwardNormal: inwardNormal,
+        distanceMeters:
+            wallLength *
+                (1.0 - openingEndProjection),
+      );
     }
+  }
+
+  void _drawCornerDistanceDimension({
+    required Canvas canvas,
+    required Offset start,
+    required Offset end,
+    required Offset tangent,
+    required Offset inwardNormal,
+    required double distanceMeters,
+  }) {
+    final screenLength =
+        (end - start).distance;
+
+    if (distanceMeters < 0.005 ||
+        screenLength < 24) {
+      return;
+    }
+
+    const dimensionOffset = 30.0;
+    const extensionEndOffset = 34.0;
+    const endMarkHalfLength = 3.0;
+    const color = Color(0xFF455A64);
+    final dimensionStart =
+        start + inwardNormal * dimensionOffset;
+    final dimensionEnd =
+        end + inwardNormal * dimensionOffset;
+    final dimensionPaint = Paint()
+      ..color = color
+      ..strokeWidth = 1.0
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.square;
+
+    canvas.drawLine(
+      start,
+      start +
+          inwardNormal * extensionEndOffset,
+      dimensionPaint,
+    );
+    canvas.drawLine(
+      end,
+      end +
+          inwardNormal * extensionEndOffset,
+      dimensionPaint,
+    );
+    canvas.drawLine(
+      dimensionStart,
+      dimensionEnd,
+      dimensionPaint,
+    );
+    canvas.drawLine(
+      dimensionStart -
+          inwardNormal * endMarkHalfLength,
+      dimensionStart +
+          inwardNormal * endMarkHalfLength,
+      dimensionPaint,
+    );
+    canvas.drawLine(
+      dimensionEnd -
+          inwardNormal * endMarkHalfLength,
+      dimensionEnd +
+          inwardNormal * endMarkHalfLength,
+      dimensionPaint,
+    );
+
+    final textPainter = TextPainter(
+      text: TextSpan(
+        text: formatLength(distanceMeters),
+        style: const TextStyle(
+          color: color,
+          fontSize: 8,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+      textAlign: TextAlign.center,
+      textDirection: TextDirection.ltr,
+      maxLines: 1,
+    )..layout();
+    final center = Offset(
+      (dimensionStart.dx + dimensionEnd.dx) / 2,
+      (dimensionStart.dy + dimensionEnd.dy) / 2,
+    );
+    var angle = math.atan2(
+      tangent.dy,
+      tangent.dx,
+    );
+
+    if (angle > math.pi / 2 ||
+        angle < -math.pi / 2) {
+      angle += math.pi;
+    }
+
+    canvas.save();
+    canvas.translate(center.dx, center.dy);
+    canvas.rotate(angle);
+
+    final backgroundRect = Rect.fromCenter(
+      center: Offset.zero,
+      width: textPainter.width + 6,
+      height: textPainter.height + 3,
+    );
+    final backgroundPaint = Paint()
+      ..color = Colors.white.withValues(
+        alpha: 0.94,
+      )
+      ..style = PaintingStyle.fill;
+
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        backgroundRect,
+        const Radius.circular(3),
+      ),
+      backgroundPaint,
+    );
+    textPainter.paint(
+      canvas,
+      Offset(
+        -textPainter.width / 2,
+        -textPainter.height / 2,
+      ),
+    );
+    canvas.restore();
   }
 
   int _nearestWallIndex(
