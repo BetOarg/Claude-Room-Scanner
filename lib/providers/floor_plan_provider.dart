@@ -300,6 +300,8 @@ class FloorPlanProvider extends ChangeNotifier {
       connectionSide: oppositeSide,
       doorHingeSide: sourceFeature.doorHingeSide,
       doorSwingSide: sourceFeature.doorSwingSide,
+      openingHeightMeters: sourceFeature.openingHeightMeters,
+      sillHeightMeters: sourceFeature.sillHeightMeters,
     );
 
     final newFeatures = List<WallFeature>.from(
@@ -595,7 +597,6 @@ class FloorPlanProvider extends ChangeNotifier {
       offsetZ: offsetZ,
     );
   }
-
   /// Organiza todas las habitaciones del proyecto en una fila.
   ///  /// Esta función corrige proyectos históricos en los que cada habitación  /// fue escaneada comenzando en (0, 0, 0), produciendo superposición visual.
   ///
@@ -826,6 +827,8 @@ class FloorPlanProvider extends ChangeNotifier {
       distanceFromWallStartMeters:
           math.min(first, second) * wall.length,
       wallLengthMeters: wall.length,
+      openingHeightMeters: feature.openingHeightMeters,
+      sillHeightMeters: feature.sillHeightMeters,
     );
   }
 
@@ -836,6 +839,8 @@ class FloorPlanProvider extends ChangeNotifier {
     required String featureId,
     required double widthMeters,
     required double distanceFromWallStartMeters,
+    double? openingHeightMeters,
+    double? sillHeightMeters,
   }) async {
     if (!widthMeters.isFinite || widthMeters < 0.20) {
       return const OpeningGeometryUpdateResult.invalid(
@@ -846,6 +851,19 @@ class FloorPlanProvider extends ChangeNotifier {
         distanceFromWallStartMeters < 0) {
       return const OpeningGeometryUpdateResult.invalid(
         'La distancia desde la esquina no puede ser negativa.',
+      );
+    }
+    if (openingHeightMeters != null &&
+        (!openingHeightMeters.isFinite ||
+            openingHeightMeters < 0.20)) {
+      return const OpeningGeometryUpdateResult.invalid(
+        'La altura debe ser de al menos 0,20 metros.',
+      );
+    }
+    if (sillHeightMeters != null &&
+        (!sillHeightMeters.isFinite || sillHeightMeters < 0)) {
+      return const OpeningGeometryUpdateResult.invalid(
+        'La altura desde el piso no puede ser negativa.',
       );
     }
 
@@ -937,6 +955,8 @@ class FloorPlanProvider extends ChangeNotifier {
           features[candidateFeatureIndex].copyWith(
         start: updatedStart,
         end: updatedEnd,
+        openingHeightMeters: openingHeightMeters,
+        sillHeightMeters: sillHeightMeters,
       );
       _completedRooms[index] = candidateRoom.copyWith(
         features: features,
@@ -1176,8 +1196,7 @@ class FloorPlanProvider extends ChangeNotifier {
         y:
             (feature.start.y +
                     feature.end.y) /
-                2.0,
-        z:
+                2.0,        z:
             (feature.start.z +
                     feature.end.z) /
                 2.0,
@@ -1685,11 +1704,15 @@ class OpeningPlacement {
   final double widthMeters;
   final double distanceFromWallStartMeters;
   final double wallLengthMeters;
+  final double openingHeightMeters;
+  final double sillHeightMeters;
 
   const OpeningPlacement({
     required this.widthMeters,
     required this.distanceFromWallStartMeters,
     required this.wallLengthMeters,
+    required this.openingHeightMeters,
+    required this.sillHeightMeters,
   });
 }
 
