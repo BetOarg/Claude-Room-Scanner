@@ -497,8 +497,7 @@ class _BasicScannerScreenState
                 size: 64,
               ),
               const SizedBox(
-                height: 20,              ),
-              const Text(
+                height: 20,              ),              const Text(
                 'No se pudo iniciar la cámara',
                 style: TextStyle(
                   color: Colors.white,
@@ -997,8 +996,7 @@ class _BasicScannerScreenState
                   CrossAxisAlignment.start,
               children: [
                 Text(                  l10n.roomType,
-                  style:
-                      TextStyle(
+                  style:                      TextStyle(
                     fontSize: 20,
                     fontWeight:
                         FontWeight.bold,
@@ -1101,16 +1099,16 @@ class _BasicScannerScreenState
     return Positioned(
       left: 10,
       right: 10,
-      bottom: 10,
+      bottom: 6,
       child: SafeArea(
         top: false,
         child: Container(
           padding:
               const EdgeInsets.fromLTRB(
-            12,
-            12,
-            12,
-            12,
+            8,
+            8,
+            8,
+            8,
           ),
           decoration:
               BoxDecoration(
@@ -1120,7 +1118,7 @@ class _BasicScannerScreenState
             ),
             borderRadius:
                 BorderRadius.circular(
-              22,
+              16,
             ),
             border: Border.all(
               color: Colors.white24,
@@ -1130,13 +1128,13 @@ class _BasicScannerScreenState
             children: [
               _buildModeSelector(),
               const SizedBox(
-                height: 12,
+                height: 6,
               ),
               Row(
                 children: [
                   _buildUndoButton(
                     provider,
-                  ),                  const SizedBox(                    width: 10,
+                  ),                  const SizedBox(                    width: 6,
                   ),
                   Expanded(
                     child:
@@ -1145,7 +1143,7 @@ class _BasicScannerScreenState
                     ),
                   ),
                   const SizedBox(
-                    width: 10,
+                    width: 6,
                   ),
                   _buildFinishButton(
                     provider,
@@ -1236,8 +1234,8 @@ class _BasicScannerScreenState
         ),
         padding:
             const EdgeInsets.symmetric(
-          vertical: 9,
-          horizontal: 6,
+          vertical: 5,
+          horizontal: 4,
         ),
         decoration:
             BoxDecoration(
@@ -1261,10 +1259,10 @@ class _BasicScannerScreenState
               color: selected
                   ? Colors.white
                   : Colors.white70,
-              size: 20,
+              size: 17,
             ),
             const SizedBox(
-              height: 3,
+              height: 1,
             ),
             Text(
               label,
@@ -1273,7 +1271,7 @@ class _BasicScannerScreenState
                 color: selected
                     ? Colors.white
                     : Colors.white70,
-                fontSize: 11,
+                fontSize: 10,
                 fontWeight:
                     selected
                         ? FontWeight.bold
@@ -1344,8 +1342,8 @@ class _BasicScannerScreenState
             _protectedInitialPointCount;
 
     return SizedBox(
-      width: 48,
-      height: 52,
+      width: 42,
+      height: 44,
       child: IconButton(
         onPressed: enabled
             ? () {
@@ -1374,6 +1372,7 @@ class _BasicScannerScreenState
         ),
         icon: const Icon(
           Icons.undo,
+          size: 21,
         ),
       ),
     );
@@ -1405,7 +1404,7 @@ class _BasicScannerScreenState
     }
 
     return SizedBox(
-      height: 52,
+      height: 44,
       child: ElevatedButton.icon(
         onPressed: _processing
             ? null
@@ -1416,17 +1415,19 @@ class _BasicScannerScreenState
           count == 0
               ? Icons.location_on
               : Icons.straighten,
+          size: 18,
         ),
-        label: Text(
-          label,
-          maxLines: 1,
-          overflow:
-              TextOverflow.ellipsis,
-          style:
-              const TextStyle(
-            fontWeight:
-                FontWeight.bold,
-            fontSize: 12,
+        label: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            label,
+            maxLines: 1,
+            style:
+                const TextStyle(
+              fontWeight:
+                  FontWeight.bold,
+              fontSize: 11,
+            ),
           ),
         ),
         style:
@@ -1443,7 +1444,7 @@ class _BasicScannerScreenState
               RoundedRectangleBorder(
             borderRadius:
                 BorderRadius.circular(
-              14,
+              12,
             ),
           ),
         ),
@@ -1458,8 +1459,8 @@ class _BasicScannerScreenState
         provider.currentPointsCount >= 3;
 
     return SizedBox(
-      width: 52,
-      height: 52,
+      width: 44,
+      height: 44,
       child: IconButton(
         onPressed: enabled && !_processing
             ? () => _closeRoom(
@@ -1479,12 +1480,13 @@ class _BasicScannerScreenState
               RoundedRectangleBorder(
             borderRadius:
                 BorderRadius.circular(
-              14,
+              12,
             ),
           ),
         ),
         icon: const Icon(
           Icons.check,
+          size: 22,
         ),
       ),
     );
@@ -1493,8 +1495,7 @@ class _BasicScannerScreenState
     ScannerProvider provider,
   ) async {
     if (_processing) {
-      return;
-    }
+      return;    }
     HapticFeedback.lightImpact();
 
     if (provider.currentPointsCount == 0) {
@@ -1993,8 +1994,7 @@ class _BasicScannerScreenState
                     const SizedBox(
                       height: 7,
                     ),
-                    Wrap(
-                      spacing: 6,                      runSpacing: 6,
+                    Wrap(                      spacing: 6,                      runSpacing: 6,
                       children: [
                         _angleChip(
                           'Frente',
@@ -2493,8 +2493,7 @@ class _ContinuationPlanPainter extends CustomPainter {
   const _ContinuationPlanPainter({
     required this.rooms,
     required this.reference,
-  });
-  @override
+  });  @override
   void paint(Canvas canvas, Size size) {
     final points = <ARPoint>[
       for (final room in rooms) ...room.points,
