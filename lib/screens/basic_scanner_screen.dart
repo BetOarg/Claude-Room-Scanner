@@ -15,6 +15,7 @@ import '../scanner/adapters/basic_scanner_adapter.dart';
 import '../scanner/models/scanner_mode.dart';
 import '../scanner/models/scanner_point.dart';
 import '../scanner/services/scanner_permission_service.dart';
+import '../utils/scan_validator.dart';
 import 'floor_plan_viewer_screen.dart';
 
 enum BasicAppMode {
@@ -596,8 +597,7 @@ class _BasicScannerScreenState
   ) {
     final room = provider.currentRoom;
     final points =
-        room?.points ?? const <ARPoint>[];
-    final features =        room?.features ?? const <WallFeature>[];
+        room?.points ?? const <ARPoint>[];    final features =        room?.features ?? const <WallFeature>[];
 
     return IgnorePointer(
       child: CustomPaint(
@@ -1196,8 +1196,7 @@ class _BasicScannerScreenState
           child: _modeButton(
             BasicAppMode.door,
             Icons.door_front_door,
-            l10n.door,          ),
-        ),
+            l10n.door,          ),        ),
         const SizedBox(
           width: 6,
         ),
@@ -1617,6 +1616,33 @@ class _BasicScannerScreenState
         return;
       }
 
+      final closingDistance =
+          _smartClosingDistance(
+        provider,
+        candidate,
+      );
+
+      if (closingDistance != null) {
+        final shouldClose =
+            await _confirmSmartClose(
+          closingDistance,
+        );
+
+        if (!mounted) {
+          return;
+        }
+
+        if (shouldClose) {
+          _scannerAdapter
+              .cancelPendingMeasurement();
+
+          await _closeRoom(
+            provider,
+          );
+          return;
+        }
+      }
+
       final result =
           provider.tryAddPoint(
         candidate.x,
@@ -1647,7 +1673,8 @@ class _BasicScannerScreenState
         );
       }
 
-      if (result.warningMessage != null) {
+      if (closingDistance == null &&
+          result.warningMessage != null) {
         _showMessage(
           result.warningMessage!,
         );
@@ -1666,6 +1693,83 @@ class _BasicScannerScreenState
         });
       }
     }
+  }
+
+  double? _smartClosingDistance(
+    ScannerProvider provider,
+    ScannerPoint candidate,
+  ) {
+    final points =
+        provider.currentRoom?.points;
+
+    if (points == null ||
+        points.length < 3) {
+      return null;
+    }
+
+    final first = points.first;
+    final deltaX =
+        candidate.x - first.x;
+    final deltaZ =
+        candidate.z - first.z;
+    final distance =
+        math.sqrt(
+      deltaX * deltaX +
+          deltaZ * deltaZ,
+    );
+
+    return distance <=
+            ScanValidator.autoCloseThreshold
+        ? distance
+        : null;
+  }
+
+  Future<bool> _confirmSmartClose(
+    double distance,
+  ) async {
+    final confirmed =
+        await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) =>
+          AlertDialog(
+        title: const Text(
+          'Cerrar ambiente',
+        ),
+        content: Text(
+          'La medición termina a '
+          '${distance.toStringAsFixed(2)} metros del punto inicial. '
+          '¿Querés ajustar el cierre exactamente al inicio?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () =>
+                Navigator.pop(
+              dialogContext,
+              false,
+            ),
+            child: const Text(
+              'Continuar midiendo',
+            ),
+          ),
+          FilledButton.icon(
+            onPressed: () =>
+                Navigator.pop(
+              dialogContext,
+              true,
+            ),
+            icon: const Icon(
+              Icons.check_circle_outline,
+            ),
+            label: const Text(
+              'Cerrar ambiente',
+            ),
+          ),
+        ],
+      ),
+    );
+
+    return confirmed ?? false;
   }
 
   Future<void> _captureFeature(
@@ -1691,8 +1795,7 @@ class _BasicScannerScreenState
 
     final measurement =
         await _showMeasurementDialog(
-      nextCorner:
-          provider.currentPointsCount,
+      nextCorner:          provider.currentPointsCount,
       featureMode: true,
     );
 
@@ -2291,7 +2394,6 @@ class _BasicScannerScreenState
     if (normalized == normalized.roundToDouble()) {
       return normalized.toStringAsFixed(0);
     }
-
     return normalized
         .toStringAsFixed(2)
         .replaceFirst(RegExp(r'0+$'), '')
@@ -2891,8 +2993,7 @@ class _ScannerGuidePainter
 
     canvas.drawLine(
       Offset(
-        center.dx,
-        center.dy - 20,
+        center.dx,        center.dy - 20,
       ),
       Offset(
         center.dx,
