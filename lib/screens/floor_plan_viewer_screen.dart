@@ -507,8 +507,7 @@ class _FloorPlanViewerScreenState
     }
 
     if (formatted.endsWith('.')) {
-      formatted = formatted.substring(
-        0,
+      formatted = formatted.substring(        0,
         formatted.length - 1,
       );
     }
@@ -1017,8 +1016,7 @@ class _FloorPlanViewerScreenState
                 onTap: () {
                   Navigator.pop(
                     bottomSheetContext,
-                    FeatureType.door,
-                  );
+                    FeatureType.door,                  );
                 },
               ),
               ListTile(
@@ -1527,7 +1525,6 @@ class _OpeningDirectionPainter extends CustomPainter {
   const _OpeningDirectionPainter({
     required this.openingDirection,
   });
-
   @override
   void paint(Canvas canvas, Size size) {
     final midpoint = Offset(
@@ -1762,6 +1759,8 @@ class FloorPlanPainter
     final referencePaint = Paint()
       ..color = const Color(0xFF00C853)
       ..style = PaintingStyle.fill;
+    final dimensionedFeatureIds =
+        <String>{};
 
     for (final room in rooms) {
       _drawRoom(
@@ -1789,6 +1788,12 @@ class FloorPlanPainter
       _drawWallDimensions(
         canvas,
         room,
+      );
+
+      _drawOpeningDimensions(
+        canvas,
+        room,
+        dimensionedFeatureIds,
       );
     }
   }
@@ -1994,7 +1999,8 @@ class FloorPlanPainter
         _screenSignedArea(screenPoints);
 
     if (signedArea.abs() < 0.000001) {
-      return;    }
+      return;
+    }
 
     final dimensionPaint = Paint()
       ..color = const Color(0xFF174EA6)
@@ -2028,8 +2034,7 @@ class FloorPlanPainter
       const dimensionOffset = 19.0;
       const extensionStartOffset = 5.0;
       const extensionEndOffset = 24.0;
-      const endMarkHalfLength = 4.0;
-      final dimensionStart =
+      const endMarkHalfLength = 4.0;      final dimensionStart =
           start + outwardNormal * dimensionOffset;
       final dimensionEnd =
           end + outwardNormal * dimensionOffset;
@@ -2141,6 +2146,259 @@ class FloorPlanPainter
     }
 
     return area / 2;
+  }
+
+  // ===========================================================================
+  // COTAS DE PUERTAS Y VENTANAS
+  // ===========================================================================
+
+  void _drawOpeningDimensions(
+    Canvas canvas,
+    RoomModel room,
+    Set<String> dimensionedFeatureIds,
+  ) {
+    if (room.points.length < 3 ||
+        room.features.isEmpty) {
+      return;
+    }
+
+    final roomScreenPoints = room.points
+        .map(transform)
+        .toList(growable: false);
+    final signedArea =
+        _screenSignedArea(roomScreenPoints);
+
+    if (signedArea.abs() < 0.000001) {
+      return;
+    }
+
+    for (final feature in room.features) {
+      if (!dimensionedFeatureIds.add(feature.id)) {
+        continue;
+      }
+
+      final featureStart =
+          transform(feature.start);
+      final featureEnd =
+          transform(feature.end);
+      final featureDirection =
+          featureEnd - featureStart;
+      final featureScreenLength =
+          featureDirection.distance;
+
+      if (featureScreenLength < 8) {
+        continue;
+      }
+
+      final midpoint = Offset(
+        (featureStart.dx + featureEnd.dx) / 2,
+        (featureStart.dy + featureEnd.dy) / 2,
+      );
+      final wallIndex = _nearestWallIndex(
+        midpoint,
+        roomScreenPoints,
+      );
+
+      if (wallIndex < 0) {
+        continue;
+      }
+
+      final nextWallIndex =
+          (wallIndex + 1) % roomScreenPoints.length;
+      final wallDirection =
+          roomScreenPoints[nextWallIndex] -
+              roomScreenPoints[wallIndex];
+      final wallScreenLength =
+          wallDirection.distance;
+
+      if (wallScreenLength < 0.000001) {
+        continue;
+      }
+
+      final wallTangent =
+          wallDirection / wallScreenLength;
+      final outwardNormal = signedArea > 0
+          ? Offset(
+              wallTangent.dy,
+              -wallTangent.dx,
+            )
+          : Offset(
+              -wallTangent.dy,
+              wallTangent.dx,
+            );
+      final inwardNormal = -outwardNormal;
+      final featureTangent =
+          featureDirection / featureScreenLength;
+      const dimensionOffset = 14.0;
+      const extensionEndOffset = 18.0;
+      const endMarkHalfLength = 3.5;
+      final dimensionStart =
+          featureStart +
+              inwardNormal * dimensionOffset;
+      final dimensionEnd =
+          featureEnd +
+              inwardNormal * dimensionOffset;
+      final color =
+          feature.type == FeatureType.door
+              ? const Color(0xFFE65100)
+              : const Color(0xFFAA00CC);
+      final dimensionPaint = Paint()
+        ..color = color
+        ..strokeWidth = 1.2
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.square;
+
+      canvas.drawLine(
+        featureStart,
+        featureStart +
+            inwardNormal * extensionEndOffset,
+        dimensionPaint,
+      );
+      canvas.drawLine(
+        featureEnd,
+        featureEnd +
+            inwardNormal * extensionEndOffset,
+        dimensionPaint,
+      );
+      canvas.drawLine(
+        dimensionStart,
+        dimensionEnd,
+        dimensionPaint,
+      );
+      canvas.drawLine(
+        dimensionStart -
+            inwardNormal * endMarkHalfLength,
+        dimensionStart +
+            inwardNormal * endMarkHalfLength,
+        dimensionPaint,
+      );
+      canvas.drawLine(
+        dimensionEnd -
+            inwardNormal * endMarkHalfLength,
+        dimensionEnd +
+            inwardNormal * endMarkHalfLength,
+        dimensionPaint,
+      );
+
+      final openingWidth =
+          GeometryService.calculateDistance(
+        feature.start,
+        feature.end,
+      );
+      final textPainter = TextPainter(
+        text: TextSpan(
+          text: formatLength(openingWidth),
+          style: TextStyle(
+            color: color,
+            fontSize: 9,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        textAlign: TextAlign.center,
+        textDirection: TextDirection.ltr,
+        maxLines: 1,
+      )..layout();
+      final center = Offset(
+        (dimensionStart.dx + dimensionEnd.dx) / 2,
+        (dimensionStart.dy + dimensionEnd.dy) / 2,
+      );
+      var angle = math.atan2(
+        featureTangent.dy,
+        featureTangent.dx,
+      );
+
+      if (angle > math.pi / 2 ||
+          angle < -math.pi / 2) {
+        angle += math.pi;
+      }
+
+      canvas.save();
+      canvas.translate(center.dx, center.dy);
+      canvas.rotate(angle);
+
+      final backgroundRect = Rect.fromCenter(
+        center: Offset.zero,
+        width: textPainter.width + 7,
+        height: textPainter.height + 4,
+      );
+      final backgroundPaint = Paint()
+        ..color = Colors.white.withValues(
+          alpha: 0.94,
+        )
+        ..style = PaintingStyle.fill;
+
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          backgroundRect,
+          const Radius.circular(4),
+        ),
+        backgroundPaint,
+      );
+      textPainter.paint(
+        canvas,
+        Offset(
+          -textPainter.width / 2,
+          -textPainter.height / 2,
+        ),
+      );
+      canvas.restore();
+    }
+  }
+
+  int _nearestWallIndex(
+    Offset point,
+    List<Offset> wallPoints,
+  ) {
+    var nearestIndex = -1;
+    var nearestDistance = double.infinity;
+
+    for (var index = 0;
+        index < wallPoints.length;
+        index++) {
+      final nextIndex =
+          (index + 1) % wallPoints.length;
+      final distance = _distanceToSegment(
+        point,
+        wallPoints[index],
+        wallPoints[nextIndex],
+      );
+
+      if (distance < nearestDistance) {
+        nearestDistance = distance;
+        nearestIndex = index;
+      }
+    }
+
+    return nearestIndex;
+  }
+
+  double _distanceToSegment(
+    Offset point,
+    Offset start,
+    Offset end,
+  ) {
+    final segment = end - start;
+    final lengthSquared =
+        segment.dx * segment.dx +
+            segment.dy * segment.dy;
+
+    if (lengthSquared <= 0.000001) {
+      return (point - start).distance;
+    }
+
+    final fromStart = point - start;
+    final projection =
+        (fromStart.dx * segment.dx +
+                fromStart.dy * segment.dy) /
+            lengthSquared;
+    final clampedProjection =
+        projection.clamp(0.0, 1.0).toDouble();
+    final closest = Offset(
+      start.dx + segment.dx * clampedProjection,
+      start.dy + segment.dy * clampedProjection,
+    );
+
+    return (point - closest).distance;
   }
 
   // ===========================================================================
