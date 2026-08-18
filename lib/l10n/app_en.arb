@@ -133,10 +133,12 @@
   "squareFeet": "square feet",
   "changeDoorHingeSide": "Change hinge side",
   "changeDoorOpeningDirection": "Change opening direction",
-  "editOpeningDimensions": "Edit width and position",
+  "editOpeningDimensions": "Edit measurements and position",
   "openingWidth": "Opening width",
   "distanceFromWallStart": "Distance from the starting wall corner",
   "wallLength": "Wall length",
   "invalidOpeningMeasurement": "Enter valid measurements for the width and position.",
-  "openingUpdated": "Opening updated successfully."
+  "openingUpdated": "Opening updated successfully.",
+  "openingHeight": "Opening height",
+  "sillHeight": "Height above floor"
 }
