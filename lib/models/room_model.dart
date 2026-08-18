@@ -144,6 +144,8 @@ class WallFeature {
   final OpeningConnectionSide? connectionSide;
   final DoorHingeSide doorHingeSide;
   final DoorSwingSide doorSwingSide;
+  final double openingHeightMeters;
+  final double sillHeightMeters;
 
   WallFeature({
     required this.id,
@@ -154,7 +156,12 @@ class WallFeature {
     this.connectionSide,
     this.doorHingeSide = DoorHingeSide.start,
     this.doorSwingSide = DoorSwingSide.left,
-  });
+    double? openingHeightMeters,
+    double? sillHeightMeters,
+  })  : openingHeightMeters = openingHeightMeters ??
+            (type == FeatureType.door ? 2.10 : 1.20),
+        sillHeightMeters = sillHeightMeters ??
+            (type == FeatureType.door ? 0.0 : 0.90);
 
   bool get isConnected =>
       connectedRoomId != null && connectedRoomId!.trim().isNotEmpty;
@@ -168,6 +175,8 @@ class WallFeature {
     OpeningConnectionSide? connectionSide,
     DoorHingeSide? doorHingeSide,
     DoorSwingSide? doorSwingSide,
+    double? openingHeightMeters,
+    double? sillHeightMeters,
   }) {
     return WallFeature(
       id: id ?? this.id,
@@ -178,6 +187,9 @@ class WallFeature {
       connectionSide: connectionSide ?? this.connectionSide,
       doorHingeSide: doorHingeSide ?? this.doorHingeSide,
       doorSwingSide: doorSwingSide ?? this.doorSwingSide,
+      openingHeightMeters:
+          openingHeightMeters ?? this.openingHeightMeters,
+      sillHeightMeters: sillHeightMeters ?? this.sillHeightMeters,
     );
   }
 
@@ -193,6 +205,8 @@ class WallFeature {
         'connectionSide': connectionSide!.name,
       'doorHingeSide': doorHingeSide.name,
       'doorSwingSide': doorSwingSide.name,
+      'openingHeightMeters': openingHeightMeters,
+      'sillHeightMeters': sillHeightMeters,
     };
   }
 
@@ -235,6 +249,10 @@ class WallFeature {
         (candidate) => candidate.name == swingName,
         orElse: () => DoorSwingSide.left,
       ),
+      openingHeightMeters:
+          (json['openingHeightMeters'] as num?)?.toDouble(),
+      sillHeightMeters:
+          (json['sillHeightMeters'] as num?)?.toDouble(),
     );
   }
 }
