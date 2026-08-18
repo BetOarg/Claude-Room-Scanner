@@ -408,12 +408,11 @@ class _BasicScannerScreenState
       body: Stack(
         children: [
           _buildCameraPreview(),
-          _buildScannerOverlay(provider),
-          if (widget.continuationReference != null &&
-              completedRooms.isNotEmpty)
+          if (completedRooms.isNotEmpty)
             _buildContinuationPlanReference(
               completedRooms,
             ),
+          _buildScannerOverlay(provider),
           _buildTopHud(provider),
           _buildBottomPanel(provider),
         ],
@@ -425,7 +424,7 @@ class _BasicScannerScreenState
     List<RoomModel> rooms,
   ) {
     final reference =
-        widget.continuationReference!;
+        widget.continuationReference;
 
     return Positioned(
       right: 12,
@@ -498,8 +497,7 @@ class _BasicScannerScreenState
                 size: 64,
               ),
               const SizedBox(
-                height: 20,
-              ),
+                height: 20,              ),
               const Text(
                 'No se pudo iniciar la cámara',
                 style: TextStyle(
@@ -998,8 +996,7 @@ class _BasicScannerScreenState
               crossAxisAlignment:
                   CrossAxisAlignment.start,
               children: [
-                Text(
-                  l10n.roomType,
+                Text(                  l10n.roomType,
                   style:
                       TextStyle(
                     fontSize: 20,
@@ -1498,7 +1495,6 @@ class _BasicScannerScreenState
     if (_processing) {
       return;
     }
-
     HapticFeedback.lightImpact();
 
     if (provider.currentPointsCount == 0) {
@@ -1629,6 +1625,24 @@ class _BasicScannerScreenState
   Future<void> _captureFeature(
     ScannerProvider provider,
   ) async {
+    int? preferredWallIndex;
+
+    if (provider.currentPointsCount >= 3) {
+      final wallSelection =
+          await _showFeatureWallDialog(
+        provider.currentPointsCount,
+      );
+
+      if (wallSelection == null) {
+        return;
+      }
+
+      if (wallSelection >= 0) {
+        preferredWallIndex =
+            wallSelection;
+      }
+    }
+
     final measurement =
         await _showMeasurementDialog(
       nextCorner:
@@ -1691,6 +1705,8 @@ class _BasicScannerScreenState
         candidate.toARPoint(),
         widthMeters:
             width,
+        preferredWallIndex:
+            preferredWallIndex,
       );
 
       // Una abertura no desplaza la última esquina del contorno.
@@ -1726,7 +1742,53 @@ class _BasicScannerScreenState
         });
       }
     }
-  }  Future<_BasicMeasurement?>
+  }
+
+  Future<int?> _showFeatureWallDialog(
+    int pointCount,
+  ) {
+    return showDialog<int>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text(
+            '¿En qué pared está la abertura?',
+          ),
+          content: const Text(
+            'Elegí la pared de cierre si la puerta o ventana está sobre el tramo que une la última esquina con la primera.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+              },
+              child: const Text('Cancelar'),
+            ),
+            OutlinedButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop(-1);
+              },
+              child: const Text(
+                'Detectar pared automáticamente',
+              ),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop(
+                  pointCount - 1,
+                );
+              },
+              child: const Text(
+                'Usar pared de cierre',
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<_BasicMeasurement?>
       _showMeasurementDialog({
     required int nextCorner,
     bool featureMode = false,
@@ -1932,8 +1994,7 @@ class _BasicScannerScreenState
                       height: 7,
                     ),
                     Wrap(
-                      spacing: 6,
-                      runSpacing: 6,
+                      spacing: 6,                      runSpacing: 6,
                       children: [
                         _angleChip(
                           'Frente',
@@ -2427,13 +2488,12 @@ class _BasicScannerScreenState
 
 class _ContinuationPlanPainter extends CustomPainter {
   final List<RoomModel> rooms;
-  final ScanContinuationReference reference;
+  final ScanContinuationReference? reference;
 
   const _ContinuationPlanPainter({
     required this.rooms,
     required this.reference,
   });
-
   @override
   void paint(Canvas canvas, Size size) {
     final points = <ARPoint>[
@@ -2502,8 +2562,9 @@ class _ContinuationPlanPainter extends CustomPainter {
       canvas.drawPath(path, wallPaint);
 
       for (final feature in room.features) {
-        final selected = room.id == reference.sourceRoomId &&
-            feature.id == reference.featureId;
+        final selected = reference != null &&
+            room.id == reference!.sourceRoomId &&
+            feature.id == reference!.featureId;
         final featurePaint = Paint()
           ..color = selected
               ? const Color(0xFF00C853)
@@ -2521,10 +2582,12 @@ class _ContinuationPlanPainter extends CustomPainter {
       }
     }
 
-    _drawContinuationPoint(
-      canvas,
-      project(reference.origin),
-    );
+    if (reference != null) {
+      _drawContinuationPoint(
+        canvas,
+        project(reference!.origin),
+      );
+    }
   }
 
   void _drawContinuationPoint(
