@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../l10n/generated/app_localizations.dart';
 import '../models/room_model.dart';
 import '../providers/floor_plan_provider.dart';
+import '../providers/measurement_settings_provider.dart';
 import '../services/geometry_service.dart';
 import '../services/import_export_service.dart';
 import '../services/ar_check_service.dart';
+import '../utils/measurement_units.dart';
 import 'measurement_editor_screen.dart';
 
 class FloorPlanViewerScreen extends StatefulWidget {
@@ -246,6 +249,9 @@ class _FloorPlanViewerScreenState
     });
 
     final feature = selection.feature;
+    final measurementSystem = context
+        .read<MeasurementSettingsProvider>()
+        .system;
     final label = feature.type == FeatureType.door
         ? 'Puerta'
         : 'Ventana';
@@ -273,7 +279,7 @@ class _FloorPlanViewerScreenState
                   title: Text('$label seleccionada'),
                   subtitle: Text(
                     '${feature.isConnected ? 'Conectada' : 'Disponible'} · '
-                    '${_featureWidth(feature).toStringAsFixed(2)} m'
+                    '${_formatLength(_featureWidth(feature), measurementSystem)}'
                     '${feature.isConnected ? '' : ' · Inicio en el punto marcado'}',
                   ),
                 ),
@@ -440,6 +446,81 @@ class _FloorPlanViewerScreenState
     );
   }
 
+  String _formatLength(
+    double meters,
+    MeasurementSystem measurementSystem,
+  ) {
+    final localizations =
+        AppLocalizations.of(context)!;
+
+    if (measurementSystem ==
+        MeasurementSystem.metric) {
+      return '${_formatDecimal(meters)} '
+          '${localizations.meters}';
+    }
+
+    final imperial =
+        MeasurementUnits.metersToFeetAndInches(
+      meters,
+    );
+
+    return '${imperial.feet} '
+        '${localizations.feet.toLowerCase()} '
+        '${_formatDecimal(imperial.inches)} '
+        '${localizations.inches.toLowerCase()}';
+  }
+
+  String _formatArea(
+    double squareMeters,
+    MeasurementSystem measurementSystem,
+  ) {
+    final localizations =
+        AppLocalizations.of(context)!;
+
+    if (measurementSystem ==
+        MeasurementSystem.metric) {
+      return '${_formatDecimal(squareMeters)} '
+          '${localizations.squareMeters}';
+    }
+
+    final squareFeet =
+        MeasurementUnits.squareMetersToSquareFeet(
+      squareMeters,
+    );
+
+    return '${_formatDecimal(squareFeet)} '
+        '${localizations.squareFeet}';
+  }
+
+  String _formatDecimal(
+    double value,
+  ) {
+    var formatted = value.toStringAsFixed(2);
+
+    while (formatted.contains('.') &&
+        formatted.endsWith('0')) {
+      formatted = formatted.substring(
+        0,
+        formatted.length - 1,
+      );
+    }
+
+    if (formatted.endsWith('.')) {
+      formatted = formatted.substring(
+        0,
+        formatted.length - 1,
+      );
+    }
+
+    if (Localizations.localeOf(context)
+            .languageCode ==
+        'es') {
+      formatted = formatted.replaceAll('.', ',');
+    }
+
+    return formatted;
+  }
+
   // ===========================================================================
   // EDITOR DE MEDIDAS
   // ===========================================================================
@@ -466,8 +547,7 @@ class _FloorPlanViewerScreenState
   // ORGANIZACIÓN AUTOMÁTICA
   // ===========================================================================
   Future<void> _organizeRooms() async {
-    final provider =
-        context.read<
+    final provider =        context.read<
             FloorPlanProvider>();
 
     if (provider.completedRooms.length <=
@@ -556,6 +636,10 @@ class _FloorPlanViewerScreenState
   @override  Widget build(
     BuildContext context,
   ) {
+    final measurementSystem = context
+        .watch<MeasurementSettingsProvider>()
+        .system;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text(
@@ -766,6 +850,11 @@ class _FloorPlanViewerScreenState
                                 _selectedRoomId,
                             selectedFeatureId:
                                 _selectedFeatureId,
+                            formatArea: (area) =>
+                                _formatArea(
+                              area,
+                              measurementSystem,
+                            ),
                           ),
                         ),
                       ),
@@ -801,7 +890,7 @@ class _FloorPlanViewerScreenState
                           '${rooms.length} '
                           '${rooms.length == 1 ? 'ambiente' : 'ambientes'}'
                           ' · '
-                          '${provider.totalProjectArea.toStringAsFixed(2)} m²',
+                          '${_formatArea(provider.totalProjectArea, measurementSystem)}',
                           style:
                               const TextStyle(
                             color:
@@ -1001,11 +1090,13 @@ class _FloorPlanViewerScreenState
           ) {
             final rooms =
                 provider.completedRooms;
+            final measurementSystem = context
+                .watch<MeasurementSettingsProvider>()
+                .system;
 
             return SafeArea(
               child: Padding(
-                padding:
-                    const EdgeInsets
+                padding:                    const EdgeInsets
                         .fromLTRB(
                   16,
                   16,
@@ -1082,11 +1173,16 @@ class _FloorPlanViewerScreenState
                             final room =
                                 rooms[index];
 
-                            final summary =
-                                provider
-                                    .roomSummaries[
-                                  index
-                                ];
+                            final area =
+                                GeometryService
+                                    .calculateArea(
+                              room.points,
+                            );
+                            final perimeter =
+                                GeometryService
+                                    .calculatePerimeter(
+                              room.points,
+                            );
 
                             return ListTile(
                               contentPadding:
@@ -1101,9 +1197,8 @@ class _FloorPlanViewerScreenState
                                 room.name,
                               ),
                               subtitle: Text(
-                                '${summary['area']} m²'
-                                ' · '
-                                '${summary['perimeter']} m perímetro'
+                                '${_formatArea(area, measurementSystem)} · '
+                                '${_formatLength(perimeter, measurementSystem)} de perímetro'
                                 ' · '
                                 '${room.points.length} esquinas',
                               ),
@@ -1550,8 +1645,7 @@ class _EmptyPlanView extends StatelessWidget {
               height: 8,
             ),
             Text(
-              'Completá un escaneo para visualizar '
-              'el plano general.',
+              'Completá un escaneo para visualizar '              'el plano general.',
               textAlign:
                   TextAlign.center,
               style: TextStyle(
@@ -1577,10 +1671,13 @@ class FloorPlanPainter
 
   final String? selectedRoomId;
   final String? selectedFeatureId;
+  final String Function(double)
+      formatArea;
 
   const FloorPlanPainter({
     required this.rooms,
     required this.transform,
+    required this.formatArea,
     this.selectedRoomId,
     this.selectedFeatureId,
   });
@@ -1809,7 +1906,7 @@ class FloorPlanPainter
           ),
           TextSpan(
             text:
-                '\n${area.toStringAsFixed(2)} m²',
+                '\n${formatArea(area)}',
             style:
                 const TextStyle(
               color:
