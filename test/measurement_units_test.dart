@@ -24,6 +24,48 @@ void main() {
       );
     });
 
+    test('formatea metros sin abreviaturas', () {
+      expect(
+        MeasurementUnits.formatLength(
+          3.25,
+          MeasurementSystem.metric,
+          metersLabel: 'metros',
+          feetLabel: 'pies',
+          inchesLabel: 'pulgadas',
+          decimalSeparator: ',',
+        ),
+        '3,25 metros',
+      );
+    });
+
+    test('formatea pies y pulgadas sin abreviaturas', () {
+      expect(
+        MeasurementUnits.formatLength(
+          3.2512,
+          MeasurementSystem.imperial,
+          metersLabel: 'metros',
+          feetLabel: 'pies',
+          inchesLabel: 'pulgadas',
+          decimalSeparator: ',',
+        ),
+        '10 pies 8 pulgadas',
+      );
+    });
+
+    test('omite cero pies en longitudes menores a un pie', () {
+      expect(
+        MeasurementUnits.formatLength(
+          0.20,
+          MeasurementSystem.imperial,
+          metersLabel: 'metros',
+          feetLabel: 'pies',
+          inchesLabel: 'pulgadas',
+          decimalSeparator: ',',
+        ),
+        '7,87 pulgadas',
+      );
+    });
+
     test('convierte pies y pulgadas a metros', () {
       expect(
         MeasurementUnits.feetAndInchesToMeters(
