@@ -60,6 +60,8 @@ void main() {
         closeTo(1, 0.000001),
       );
       expect(placement.wallLengthMeters, closeTo(4, 0.000001));
+      expect(placement.openingHeightMeters, closeTo(2.10, 0.000001));
+      expect(placement.sillHeightMeters, closeTo(0, 0.000001));
     });
 
     test('actualiza ancho y posición sobre la misma pared', () async {
@@ -79,6 +81,8 @@ void main() {
         featureId: 'door',
         widthMeters: 0.8,
         distanceFromWallStartMeters: 2,
+        openingHeightMeters: 2.20,
+        sillHeightMeters: 0.10,
       );
       final updated = provider.findFeature(
         roomId: 'room-1',
@@ -90,6 +94,8 @@ void main() {
       expect(updated.end.x, closeTo(2.8, 0.000001));
       expect(updated.start.z, closeTo(0, 0.000001));
       expect(updated.end.z, closeTo(0, 0.000001));
+      expect(updated.openingHeightMeters, closeTo(2.20, 0.000001));
+      expect(updated.sillHeightMeters, closeTo(0.10, 0.000001));
     });
 
     test('rechaza límites de pared y superposiciones', () async {
