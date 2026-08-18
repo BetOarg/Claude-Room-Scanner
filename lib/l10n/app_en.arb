@@ -128,5 +128,7 @@
   "metricSystem": "Meters",
   "imperialSystem": "Feet and inches",
   "feet": "Feet",
-  "inches": "Inches"
+  "inches": "Inches",
+  "squareMeters": "square meters",
+  "squareFeet": "square feet"
 }
