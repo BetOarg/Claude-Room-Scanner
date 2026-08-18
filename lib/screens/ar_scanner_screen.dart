@@ -13,8 +13,10 @@ import '../l10n/generated/app_localizations.dart';
 import '../l10n/room_type_localization.dart';
 import '../models/room_model.dart';
 import '../providers/floor_plan_provider.dart';
+import '../providers/measurement_settings_provider.dart';
 import '../providers/scanner_provider.dart';
 import '../services/permission_service.dart';
+import '../utils/measurement_units.dart';
 import '../utils/scan_validator.dart';
 import '../scanner/adapters/ar_scanner_adapter.dart';
 import 'floor_plan_viewer_screen.dart';
@@ -244,6 +246,9 @@ class _ARScannerScreenState extends State<ARScannerScreen>
 
   @override  Widget build(BuildContext context) {
     final provider = context.watch<ScannerProvider>();
+    final measurementSystem = context
+        .watch<MeasurementSettingsProvider>()
+        .system;
     final l10n = AppLocalizations.of(context)!;
 
     if (_checkingPermissions) {
@@ -462,6 +467,64 @@ class _ARScannerScreenState extends State<ARScannerScreen>
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                PopupMenuButton<MeasurementSystem>(
+                  tooltip: l10n.measurementSystem,
+                  initialValue: measurementSystem,
+                  onSelected: (newSystem) {
+                    context
+                        .read<MeasurementSettingsProvider>()
+                        .setSystem(newSystem);
+                  },
+                  itemBuilder: (context) => [
+                    PopupMenuItem<MeasurementSystem>(
+                      value: MeasurementSystem.metric,
+                      child: ListTile(
+                        dense: true,
+                        leading: const Icon(
+                          Icons.straighten,
+                        ),
+                        title: Text(
+                          l10n.metricSystem,
+                        ),
+                      ),
+                    ),
+                    PopupMenuItem<MeasurementSystem>(
+                      value: MeasurementSystem.imperial,
+                      child: ListTile(
+                        dense: true,
+                        leading: const Icon(
+                          Icons.square_foot,
+                        ),
+                        title: Text(
+                          l10n.imperialSystem,
+                        ),
+                      ),
+                    ),
+                  ],
+                  child: Chip(
+                    avatar: Icon(
+                      measurementSystem ==
+                              MeasurementSystem.metric
+                          ? Icons.straighten
+                          : Icons.square_foot,
+                      size: 18,
+                      color: Colors.white,
+                    ),
+                    label: Text(
+                      measurementSystem ==
+                              MeasurementSystem.metric
+                          ? l10n.metricSystem
+                          : l10n.imperialSystem,
+                    ),
+                    backgroundColor: Colors.black87,
+                    labelStyle: const TextStyle(
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 8),
+
                 // ------------------------------------------------------
                 // SELECTOR DE MODO
                 // ------------------------------------------------------
@@ -484,8 +547,7 @@ class _ARScannerScreenState extends State<ARScannerScreen>
                     _buildModeChip(
                       AppMode.window,
                       Icons.window,
-                      l10n.window,
-                    ),
+                      l10n.window,                    ),
                   ],
                 ),
 
@@ -828,18 +890,75 @@ class _ARScannerScreenState extends State<ARScannerScreen>
 
     final expectedWidth = widget.continuationReference!.width;
     final difference = (measuredWidth - expectedWidth).abs();
+    final measurementSystem = context
+        .read<MeasurementSettingsProvider>()
+        .system;
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
           difference > 0.15
-              ? 'Referencia alineada. Atención: la medida AR difiere ${difference.toStringAsFixed(2)} m del plano.'
+              ? 'Referencia alineada. Atención: la medida de realidad aumentada difiere '
+                  '${_formatLength(difference, measurementSystem)} del plano.'
               : 'Referencia alineada correctamente.',
         ),
         backgroundColor:
             difference > 0.15 ? Colors.orange : Colors.green,
       ),
     );
+  }
+
+  String _formatLength(
+    double meters,
+    MeasurementSystem measurementSystem,
+  ) {
+    final localizations =
+        AppLocalizations.of(context)!;
+
+    if (measurementSystem ==
+        MeasurementSystem.metric) {
+      return '${_formatDecimal(meters)} '
+          '${localizations.meters}';
+    }
+
+    final imperial =
+        MeasurementUnits.metersToFeetAndInches(
+      meters,
+    );
+
+    return '${imperial.feet} '
+        '${localizations.feet.toLowerCase()} '
+        '${_formatDecimal(imperial.inches)} '
+        '${localizations.inches.toLowerCase()}';
+  }
+
+  String _formatDecimal(
+    double value,
+  ) {
+    var formatted = value.toStringAsFixed(2);
+
+    while (formatted.contains('.') &&
+        formatted.endsWith('0')) {
+      formatted = formatted.substring(
+        0,
+        formatted.length - 1,
+      );
+    }
+
+    if (formatted.endsWith('.')) {
+      formatted = formatted.substring(
+        0,
+        formatted.length - 1,
+      );
+    }
+
+    if (Localizations.localeOf(context)
+            .languageCode ==
+        'es') {
+      formatted = formatted.replaceAll('.', ',');
+    }
+
+    return formatted;
   }
 
   vector.Vector3 _toContinuationLocal(
@@ -977,8 +1096,7 @@ class _ARScannerScreenState extends State<ARScannerScreen>
       return;
     }
 
-    final resolvedPosition =
-        _toContinuationLocal(pos);
+    final resolvedPosition =        _toContinuationLocal(pos);
 
     switch (_currentMode) {
       case AppMode.wall:
