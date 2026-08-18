@@ -118,8 +118,8 @@ class _BasicScannerScreenState
 
       if (!permissionGranted) {
         throw StateError(
-          'El permiso de cámara es necesario '
-          'para utilizar el Scanner Básico.',
+          AppLocalizations.of(context)!
+              .cameraPermissionRequired,
         );
       }
 
@@ -152,7 +152,8 @@ class _BasicScannerScreenState
         }
 
         throw StateError(
-          'No se pudo iniciar la cámara.',
+          AppLocalizations.of(context)!
+              .cameraStartFailed,
         );
       }
 
@@ -215,7 +216,8 @@ class _BasicScannerScreenState
 
     if (cameras.isEmpty) {
       throw StateError(
-        'El dispositivo no tiene una cámara disponible.',
+        AppLocalizations.of(context)!
+            .cameraUnavailable,
       );
     }
 
@@ -249,8 +251,12 @@ class _BasicScannerScreenState
     Object? error,
   ) {
     if (error is TimeoutException) {
-      return 'La cámara tardó demasiado en responder. '
-          'Podés intentar iniciarla nuevamente.';
+      return AppLocalizations.of(context)!
+          .cameraTimeoutMessage;
+    }
+
+    if (error is StateError) {
+      return error.message;
     }
 
     final message =
@@ -258,7 +264,8 @@ class _BasicScannerScreenState
 
     if (message == null ||
         message.isEmpty) {
-      return 'No se pudo iniciar la cámara.';
+      return AppLocalizations.of(context)!
+          .cameraStartFailed;
     }
 
     return message;
@@ -444,26 +451,29 @@ class _BasicScannerScreenState
         .completedRooms;
 
     if (_initializing) {
-      return const Scaffold(
+      final l10n =
+          AppLocalizations.of(context)!;
+
+      return Scaffold(
         backgroundColor: Colors.black,
         body: Center(
           child: Column(
             mainAxisSize:
                 MainAxisSize.min,
             children: [
-              CircularProgressIndicator(),
-              SizedBox(height: 16),
+              const CircularProgressIndicator(),
+              const SizedBox(height: 16),
               Text(
-                'Preparando cámara...',
-                style: TextStyle(
+                l10n.preparingCamera,
+                style: const TextStyle(
                   color: Colors.white,
                   fontSize: 16,
                 ),
               ),
-              SizedBox(height: 6),
+              const SizedBox(height: 6),
               Text(
-                'Scanner Básico',
-                style: TextStyle(
+                l10n.basicScanner,
+                style: const TextStyle(
                   color: Colors.white54,
                   fontSize: 13,
                 ),
@@ -495,11 +505,14 @@ class _BasicScannerScreenState
   }
 
   Widget _buildInitializationError() {
+    final l10n =
+        AppLocalizations.of(context)!;
+
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
         title:
-            const Text('Scanner Básico'),
+            Text(l10n.basicScanner),
       ),
       body: Center(
         child: Padding(
@@ -515,9 +528,9 @@ class _BasicScannerScreenState
                 size: 64,
               ),
               const SizedBox(
-                height: 20,              ),              const Text(
-                'No se pudo iniciar la cámara',
-                style: TextStyle(
+                height: 20,              ),              Text(
+                l10n.cameraStartFailed,
+                style: const TextStyle(
                   color: Colors.white,
                   fontSize: 20,
                   fontWeight:
@@ -531,7 +544,7 @@ class _BasicScannerScreenState
               ),
               Text(
                 _initializationError ??
-                    'Error desconocido.',
+                    l10n.unknownError,
                 style:
                     const TextStyle(
                   color: Colors.white70,
@@ -550,8 +563,8 @@ class _BasicScannerScreenState
                 icon: const Icon(
                   Icons.refresh,
                 ),
-                label: const Text(
-                  'Reintentar cámara',
+                label: Text(
+                  l10n.retryCamera,
                 ),
               ),
             ],
@@ -584,8 +597,7 @@ class _BasicScannerScreenState
                   MediaQuery.of(context)
                       .size
                       .height,
-          child: CameraPreview(
-            controller,
+          child: CameraPreview(            controller,
           ),
         ),
       ),
@@ -1184,8 +1196,7 @@ class _BasicScannerScreenState
       children: [
         Expanded(
           child: _modeButton(
-            BasicAppMode.wall,
-            Icons.wallpaper,
+            BasicAppMode.wall,            Icons.wallpaper,
             l10n.wall,
           ),
         ),
@@ -1727,19 +1738,21 @@ class _BasicScannerScreenState
   Future<bool> _confirmSmartClose(
     double distance,
   ) async {
+    final l10n =
+        AppLocalizations.of(context)!;
     final confirmed =
         await showDialog<bool>(
       context: context,
       barrierDismissible: false,
       builder: (dialogContext) =>
           AlertDialog(
-        title: const Text(
-          'Cerrar ambiente',
+        title: Text(
+          l10n.closeRoom,
         ),
         content: Text(
-          'La medición termina a '
-          '${distance.toStringAsFixed(2)} metros del punto inicial. '
-          '¿Querés ajustar el cierre exactamente al inicio?',
+          l10n.smartCloseMessage(
+            distance.toStringAsFixed(2),
+          ),
         ),
         actions: [
           TextButton(
@@ -1748,8 +1761,8 @@ class _BasicScannerScreenState
               dialogContext,
               false,
             ),
-            child: const Text(
-              'Continuar midiendo',
+            child: Text(
+              l10n.continueMeasuring,
             ),
           ),
           FilledButton.icon(
@@ -1761,8 +1774,8 @@ class _BasicScannerScreenState
             icon: const Icon(
               Icons.check_circle_outline,
             ),
-            label: const Text(
-              'Cerrar ambiente',
+            label: Text(
+              l10n.closeRoom,
             ),
           ),
         ],
@@ -1782,7 +1795,6 @@ class _BasicScannerScreenState
           await _showFeatureWallDialog(
         provider.currentPointsCount,
       );
-
       if (wallSelection == null) {
         return;
       }
@@ -2382,7 +2394,6 @@ class _BasicScannerScreenState
     );
     setDialogState(() {});
   }
-
   double _normalizeAngle(double value) {
     final normalized = value % 360.0;
     return normalized < 0 ? normalized + 360.0 : normalized;
@@ -2982,8 +2993,7 @@ class _ScannerGuidePainter
     canvas.drawLine(
       Offset(
         center.dx - 20,
-        center.dy,
-      ),
+        center.dy,      ),
       Offset(
         center.dx + 20,
         center.dy,
