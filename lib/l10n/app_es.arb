@@ -123,5 +123,10 @@
   "left": "Izquierda",
   "featureDoesNotCreateCorner": "Esto no crea una esquina nueva del ambiente.",
   "positionValidatedBeforeAdding": "La nueva posición se valida antes de incorporarla al plano.",
-  "useMeasurement": "Usar medición"
+  "useMeasurement": "Usar medición",
+  "measurementSystem": "Sistema de medición",
+  "metricSystem": "Metros",
+  "imperialSystem": "Pies y pulgadas",
+  "feet": "Pies",
+  "inches": "Pulgadas"
 }
