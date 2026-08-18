@@ -10,6 +10,7 @@ import '../l10n/generated/app_localizations.dart';
 import '../l10n/room_type_localization.dart';
 import '../models/room_model.dart';
 import '../providers/floor_plan_provider.dart';
+import '../providers/measurement_settings_provider.dart';
 import '../providers/scanner_provider.dart';
 import '../scanner/adapters/basic_scanner_adapter.dart';
 import '../scanner/models/scanner_mode.dart';
@@ -61,9 +62,6 @@ class _BasicScannerScreenState
 
   BasicAppMode _currentMode =
       BasicAppMode.wall;
-  MeasurementSystem _measurementSystem =
-      MeasurementSystem.metric;
-
   bool _initializing = true;
   bool _cameraReady = false;
   bool _processing = false;
@@ -599,8 +597,7 @@ class _BasicScannerScreenState
                   MediaQuery.of(context)
                       .size                      .width,
           height:              controller.value.previewSize?.width ??
-                  MediaQuery.of(context)                      .size                      .height,
-          child: CameraPreview(            controller,
+                  MediaQuery.of(context)                      .size                      .height,          child: CameraPreview(            controller,
           ),
         ),
       ),
@@ -1199,8 +1196,7 @@ class _BasicScannerScreenState
       children: [        Expanded(          child: _modeButton(
             BasicAppMode.wall,            Icons.wallpaper,            l10n.wall,
           ),
-        ),
-        const SizedBox(
+        ),        const SizedBox(
           width: 6,
         ),
         Expanded(
@@ -1799,8 +1795,7 @@ class _BasicScannerScreenState
   }
 
   Future<void> _captureFeature(
-    ScannerProvider provider,
-  ) async {
+    ScannerProvider provider,  ) async {
     final l10n =
         AppLocalizations.of(context)!;
 
@@ -2017,7 +2012,9 @@ class _BasicScannerScreenState
       ),
     );
     var selectedMeasurementSystem =
-        _measurementSystem;
+        context
+            .read<MeasurementSettingsProvider>()
+            .system;
     double? distanceError;
     double? angleError;
     double? featureWidthError;
@@ -2131,7 +2128,9 @@ class _BasicScannerScreenState
 
                         setDialogState(() {
                           selectedMeasurementSystem = newSystem;
-                          _measurementSystem = newSystem;
+                          context
+                              .read<MeasurementSettingsProvider>()
+                              .setSystem(newSystem);
                           distanceError = null;
                           featureWidthError = null;
                         });
@@ -2395,8 +2394,7 @@ class _BasicScannerScreenState
                     });
 
                     if (distance == null ||                        distance <= 0 ||
-                        angle == null ||
-                        (featureMode &&
+                                 (featureMode &&
                             (featureWidth ==
                                     null ||
                                 featureWidth <
@@ -2995,8 +2993,7 @@ class _ScannerGuidePainter
       canvas.drawLine(
         projected[i],        projected[i + 1],
         linePaint,
-      );
-    }
+      );    }
 
     for (final feature in features) {
       final featurePaint = Paint()
