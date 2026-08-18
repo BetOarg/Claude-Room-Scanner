@@ -31,6 +31,9 @@ dependencies:
   # Gestión de estado
   provider: ^6.1.2
 
+  # Preferencias locales de interfaz
+  shared_preferences: 2.3.5
+
   # Selector de archivos (Importación JSON)
   file_picker: ^8.0.0
 
