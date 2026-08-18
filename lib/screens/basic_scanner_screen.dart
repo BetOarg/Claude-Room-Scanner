@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -408,70 +410,13 @@ class _BasicScannerScreenState
       body: Stack(
         children: [
           _buildCameraPreview(),
-          if (completedRooms.isNotEmpty)
-            _buildContinuationPlanReference(
-              completedRooms,
-            ),
-          _buildScannerOverlay(provider),
+          _buildScannerOverlay(
+            provider,
+            completedRooms,
+          ),
           _buildTopHud(provider),
           _buildBottomPanel(provider),
         ],
-      ),
-    );
-  }
-
-  Widget _buildContinuationPlanReference(
-    List<RoomModel> rooms,
-  ) {
-    final reference =
-        widget.continuationReference;
-
-    return Positioned(
-      right: 12,
-      bottom: 300,
-      child: IgnorePointer(
-        child: Container(
-          width: 156,
-          height: 176,
-          padding: const EdgeInsets.fromLTRB(
-            8,
-            8,
-            8,
-            6,
-          ),
-          decoration: BoxDecoration(
-            color: Colors.black.withValues(
-              alpha: 0.78,
-            ),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: const Color(0xFFFF8A00),
-              width: 1.5,
-            ),
-          ),
-          child: Column(
-            children: [
-              const Text(
-                'Plano anterior',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Expanded(
-                child: CustomPaint(
-                  size: Size.infinite,
-                  painter: _ContinuationPlanPainter(
-                    rooms: rooms,
-                    reference: reference,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }
@@ -552,8 +497,7 @@ class _BasicScannerScreenState
     }
 
     return SizedBox.expand(
-      child: FittedBox(
-        fit: BoxFit.cover,
+      child: FittedBox(        fit: BoxFit.cover,
         child: SizedBox(
           width:
               controller.value.previewSize?.height ??
@@ -574,6 +518,7 @@ class _BasicScannerScreenState
   }
   Widget _buildScannerOverlay(
     ScannerProvider provider,
+    List<RoomModel> completedRooms,
   ) {
     final room = provider.currentRoom;
     final points =
@@ -587,6 +532,12 @@ class _BasicScannerScreenState
             _ScannerGuidePainter(
           points: points,
           features: features,
+          previousRooms:
+              widget.continuationReference == null
+                  ? const <RoomModel>[]
+                  : completedRooms,
+          continuationReference:
+              widget.continuationReference,
         ),
         size: Size.infinite,
       ),
@@ -1045,8 +996,7 @@ class _BasicScannerScreenState
                           );
                         },
                       );
-                    },
-                  ),
+                    },                  ),
                 ),
               ],
             ),
@@ -1545,8 +1495,7 @@ class _BasicScannerScreenState
     ScannerProvider provider,
   ) async {
     final measurement =
-        await _showMeasurementDialog(
-      nextCorner:
+        await _showMeasurementDialog(      nextCorner:
           provider.currentPointsCount + 1,
     );
 
@@ -2045,8 +1994,7 @@ class _BasicScannerScreenState
                             onPressed: () => _adjustAngle(
                               angleController,
                               -1.0,
-                              setDialogState,
-                            ),
+                              setDialogState,                            ),
                             child: const Text('-1°'),
                           ),
                         ),
@@ -2486,135 +2434,6 @@ class _BasicScannerScreenState
   }
 }
 
-class _ContinuationPlanPainter extends CustomPainter {
-  final List<RoomModel> rooms;
-  final ScanContinuationReference? reference;
-
-  const _ContinuationPlanPainter({
-    required this.rooms,
-    required this.reference,
-  });  @override
-  void paint(Canvas canvas, Size size) {
-    final points = <ARPoint>[
-      for (final room in rooms) ...room.points,
-    ];
-
-    if (points.isEmpty) {
-      return;
-    }
-
-    double minX = points.first.x;
-    double maxX = points.first.x;
-    double minZ = points.first.z;
-    double maxZ = points.first.z;
-
-    for (final point in points.skip(1)) {
-      minX = point.x < minX ? point.x : minX;
-      maxX = point.x > maxX ? point.x : maxX;
-      minZ = point.z < minZ ? point.z : minZ;
-      maxZ = point.z > maxZ ? point.z : maxZ;
-    }
-
-    final width = (maxX - minX).abs();
-    final height = (maxZ - minZ).abs();
-    final safeWidth = width <= 0.000001 ? 1.0 : width;
-    final safeHeight = height <= 0.000001 ? 1.0 : height;
-    final scaleX = (size.width - 16) / safeWidth;
-    final scaleY = (size.height - 16) / safeHeight;
-    final scale = scaleX < scaleY ? scaleX : scaleY;
-    final drawingWidth = width * scale;
-    final drawingHeight = height * scale;
-    final offsetX = (size.width - drawingWidth) / 2.0;
-    final offsetY = (size.height - drawingHeight) / 2.0;
-
-    Offset project(ARPoint point) {
-      return Offset(
-        offsetX + (point.x - minX) * scale,
-        offsetY + (point.z - minZ) * scale,
-      );
-    }
-
-    final wallPaint = Paint()
-      ..color = const Color(0xFF448AFF)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2
-      ..strokeJoin = StrokeJoin.round;
-
-    for (final room in rooms) {
-      if (room.points.length < 2) {
-        continue;
-      }
-
-      final path = Path();
-      final first = project(room.points.first);
-      path.moveTo(first.dx, first.dy);
-
-      for (final point in room.points.skip(1)) {
-        final projected = project(point);
-        path.lineTo(projected.dx, projected.dy);
-      }
-
-      if (room.isClosed || room.points.length >= 3) {
-        path.close();
-      }
-
-      canvas.drawPath(path, wallPaint);
-
-      for (final feature in room.features) {
-        final selected = reference != null &&
-            room.id == reference!.sourceRoomId &&
-            feature.id == reference!.featureId;
-        final featurePaint = Paint()
-          ..color = selected
-              ? const Color(0xFF00C853)
-              : feature.type == FeatureType.door
-                  ? const Color(0xFFFF8A00)
-                  : const Color(0xFFD500F9)
-          ..strokeWidth = selected ? 7 : 4
-          ..strokeCap = StrokeCap.round;
-
-        canvas.drawLine(
-          project(feature.start),
-          project(feature.end),
-          featurePaint,
-        );
-      }
-    }
-
-    if (reference != null) {
-      _drawContinuationPoint(
-        canvas,
-        project(reference!.origin),
-      );
-    }
-  }
-
-  void _drawContinuationPoint(
-    Canvas canvas,
-    Offset point,
-  ) {
-    canvas.drawCircle(
-      point,
-      7,
-      Paint()..color = const Color(0xFF00C853),
-    );
-
-    canvas.drawCircle(
-      point,
-      3,
-      Paint()..color = Colors.white,
-    );
-  }
-
-  @override
-  bool shouldRepaint(
-    covariant _ContinuationPlanPainter oldDelegate,
-  ) {
-    return oldDelegate.rooms != rooms ||
-        oldDelegate.reference != reference;
-  }
-}
-
 class _BasicMeasurement {
   final double distance;
   final double angle;
@@ -2631,10 +2450,14 @@ class _ScannerGuidePainter
     extends CustomPainter {
   final List<ARPoint> points;
   final List<WallFeature> features;
+  final List<RoomModel> previousRooms;
+  final ScanContinuationReference? continuationReference;
 
   const _ScannerGuidePainter({
     required this.points,
     required this.features,
+    required this.previousRooms,
+    required this.continuationReference,
   });
 
   @override
@@ -2642,7 +2465,18 @@ class _ScannerGuidePainter
     Canvas canvas,
     Size size,
   ) {
-    if (points.isEmpty) {
+    final previousPoints = <ARPoint>[
+      for (final room in previousRooms)
+        for (final point in room.points)
+          _globalToLocal(point),
+    ];
+
+    final visiblePoints = <ARPoint>[
+      ...previousPoints,
+      ...points,
+    ];
+
+    if (visiblePoints.isEmpty) {
       _drawCenterGuide(
         canvas,
         size,
@@ -2658,9 +2492,8 @@ class _ScannerGuidePainter
 
     final scale =
         _calculateScale(
-      points,
-      size,
-    );
+      visiblePoints,
+      size,    );
 
     final projected =
         points.map((point) {
@@ -2679,11 +2512,19 @@ class _ScannerGuidePainter
       );
     }
 
+    _drawPreviousPlan(
+      canvas,
+      projectPoint,
+    );
+
     final linePaint =
         Paint()
           ..style =
               PaintingStyle.stroke
           ..strokeWidth = 4
+          ..color = Colors.black.withValues(
+            alpha: 0.92,
+          )
           ..strokeCap =
               StrokeCap.round;
 
@@ -2700,11 +2541,18 @@ class _ScannerGuidePainter
     for (final feature in features) {
       final featurePaint = Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 8
+        ..strokeWidth =
+            feature.id ==
+                    continuationReference?.featureId
+                ? 9
+                : 8
         ..strokeCap = StrokeCap.round
-        ..color = feature.type == FeatureType.door
-            ? const Color(0xFFFF8A00)
-            : const Color(0xFFD500F9);
+        ..color = feature.id ==
+                continuationReference?.featureId
+            ? const Color(0xFF00C853)
+            : feature.type == FeatureType.door
+                ? const Color(0xFFFF8A00)
+                : const Color(0xFFD500F9);
 
       canvas.drawLine(
         projectPoint(feature.start),
@@ -2756,10 +2604,161 @@ class _ScannerGuidePainter
       );
     }
 
+    if (continuationReference != null) {
+      _drawContinuationPoint(
+        canvas,
+        projectPoint(
+          ARPoint(
+            x: 0.0,
+            y: 0.0,
+            z: 0.0,
+          ),
+        ),
+      );
+    }
+
     _drawCenterGuide(
       canvas,
       size,
       onlyCross: true,
+    );
+  }
+
+  void _drawPreviousPlan(
+    Canvas canvas,
+    Offset Function(ARPoint point) project,
+  ) {
+    if (continuationReference == null) {
+      return;
+    }
+
+    final wallPaint = Paint()
+      ..color = const Color(0xFF448AFF).withValues(
+        alpha: 0.55,
+      )
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3
+      ..strokeJoin = StrokeJoin.round;
+
+    final roomFillPaint = Paint()
+      ..color = const Color(0xFF448AFF).withValues(
+        alpha: 0.08,
+      )
+      ..style = PaintingStyle.fill;
+
+    for (final room in previousRooms) {
+      if (room.points.length < 2) {
+        continue;
+      }
+
+      final path = Path();
+      final first = project(
+        _globalToLocal(room.points.first),
+      );
+      path.moveTo(first.dx, first.dy);
+
+      for (final point in room.points.skip(1)) {
+        final projected = project(
+          _globalToLocal(point),
+        );
+        path.lineTo(
+          projected.dx,
+          projected.dy,
+        );
+      }
+
+      if (room.isClosed || room.points.length >= 3) {
+        path.close();
+        canvas.drawPath(path, roomFillPaint);
+      }
+
+      canvas.drawPath(path, wallPaint);
+
+      for (final feature in room.features) {
+        final selected =
+            room.id == continuationReference!.sourceRoomId &&
+                feature.id ==
+                    continuationReference!.featureId;
+
+        final featurePaint = Paint()
+          ..color = selected
+              ? const Color(0xFF00C853)
+              : feature.type == FeatureType.door
+                  ? const Color(0xFFFF8A00).withValues(
+                      alpha: 0.60,
+                    )
+                  : const Color(0xFFD500F9).withValues(
+                      alpha: 0.60,
+                    )
+          ..strokeWidth = selected ? 9 : 5
+          ..strokeCap = StrokeCap.round;
+
+        canvas.drawLine(
+          project(_globalToLocal(feature.start)),
+          project(_globalToLocal(feature.end)),
+          featurePaint,
+        );
+      }
+    }
+  }
+
+  ARPoint _globalToLocal(
+    ARPoint point,
+  ) {
+    final reference = continuationReference;
+
+    if (reference == null) {
+      return point;
+    }
+
+    final openingDx =
+        reference.globalEnd.x - reference.globalStart.x;
+    final openingDz =
+        reference.globalEnd.z - reference.globalStart.z;
+    final openingLength =
+        math.sqrt(
+      openingDx * openingDx + openingDz * openingDz,
+    );
+
+    if (openingLength <= 0.000001) {
+      return point;
+    }
+
+    final tangentX = openingDx / openingLength;
+    final tangentZ = openingDz / openingLength;
+    final forwardX =
+        reference.side == OpeningConnectionSide.left
+            ? -tangentZ
+            : tangentZ;
+    final forwardZ =
+        reference.side == OpeningConnectionSide.left
+            ? tangentX
+            : -tangentX;
+    final rightX = forwardZ;
+    final rightZ = -forwardX;
+    final dx = point.x - reference.origin.x;
+    final dz = point.z - reference.origin.z;
+
+    return ARPoint(
+      x: dx * rightX + dz * rightZ,
+      y: point.y - reference.origin.y,
+      z: dx * forwardX + dz * forwardZ,
+    );
+  }
+
+  void _drawContinuationPoint(
+    Canvas canvas,
+    Offset point,
+  ) {
+    canvas.drawCircle(
+      point,
+      10,
+      Paint()..color = const Color(0xFF00C853),
+    );
+    canvas.drawCircle(
+      point,
+      4,
+      Paint()..color = Colors.white,
     );
   }
 
@@ -2850,30 +2849,26 @@ class _ScannerGuidePainter
       );
     }
 
-    final widthMeters =
-        (maxX - minX)
-            .abs();
+    final maxAbsoluteX =
+        mathMax(minX.abs(), maxX.abs());
+    final maxAbsoluteZ =
+        mathMax(minZ.abs(), maxZ.abs());
 
-    final heightMeters =
-        (maxZ - minZ)
-            .abs();
-
-    final largest =
-        widthMeters >
-                heightMeters
-            ? widthMeters
-            : heightMeters;
-
-    if (largest <= 0) {
+    if (maxAbsoluteX <= 0.000001 &&
+        maxAbsoluteZ <= 0.000001) {
       return 80;
     }
 
-    final available =
-        size.width < size.height
-            ? size.width * 0.45
-            : size.height * 0.35;
+    final scaleX = maxAbsoluteX <= 0.000001
+        ? double.infinity
+        : (size.width * 0.42) / maxAbsoluteX;
+    final scaleZ = maxAbsoluteZ <= 0.000001
+        ? double.infinity
+        : (size.height * 0.27) / maxAbsoluteZ;
+    final calculated =
+        scaleX < scaleZ ? scaleX : scaleZ;
 
-    return available / largest;
+    return calculated > 90 ? 90 : calculated;
   }
 
   double mathMin(
@@ -2894,6 +2889,9 @@ class _ScannerGuidePainter
   ) {
     return oldDelegate.points !=
             points ||
-        oldDelegate.features != features;
+        oldDelegate.features != features ||
+        oldDelegate.previousRooms != previousRooms ||
+        oldDelegate.continuationReference !=
+            continuationReference;
   }
 }
