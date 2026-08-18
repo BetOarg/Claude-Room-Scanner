@@ -254,11 +254,12 @@ class _FloorPlanViewerScreenState
     final measurementSystem = context
         .read<MeasurementSettingsProvider>()
         .system;
+    final localizations = AppLocalizations.of(context)!;
     final label = feature.type == FeatureType.door
         ? 'Puerta'
         : 'Ventana';
 
-    final shouldContinue = await showModalBottomSheet<bool>(
+    final action = await showModalBottomSheet<_FeatureMenuAction>(
       context: context,
       builder: (bottomSheetContext) {
         return SafeArea(
@@ -286,6 +287,36 @@ class _FloorPlanViewerScreenState
                   ),
                 ),
                 const SizedBox(height: 8),
+                if (feature.type == FeatureType.door) ...[
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () => Navigator.pop(
+                        bottomSheetContext,
+                        _FeatureMenuAction.toggleHinge,
+                      ),
+                      icon: const Icon(Icons.flip),
+                      label: Text(
+                        localizations.changeDoorHingeSide,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () => Navigator.pop(
+                        bottomSheetContext,
+                        _FeatureMenuAction.toggleSwing,
+                      ),
+                      icon: const Icon(Icons.rotate_left),
+                      label: Text(
+                        localizations.changeDoorOpeningDirection,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                ],
                 SizedBox(
                   width: double.infinity,
                   child: FilledButton.icon(
@@ -293,7 +324,7 @@ class _FloorPlanViewerScreenState
                         ? null
                         : () => Navigator.pop(
                               bottomSheetContext,
-                              true,
+                              _FeatureMenuAction.continueScanning,
                             ),
                     icon: const Icon(Icons.add_road_rounded),
                     label: Text(
@@ -312,7 +343,47 @@ class _FloorPlanViewerScreenState
 
     if (!mounted) return;
 
-    if (shouldContinue != true) {
+    if (action == _FeatureMenuAction.toggleHinge) {
+      final updated = await context
+          .read<FloorPlanProvider>()
+          .updateDoorOrientation(
+            featureId: feature.id,
+            hingeSide:
+                feature.doorHingeSide == DoorHingeSide.start
+                    ? DoorHingeSide.end
+                    : DoorHingeSide.start,
+          );
+
+      if (mounted && !updated) {
+        _showMessage(
+          'La puerta seleccionada ya no está disponible.',
+          error: true,
+        );
+      }
+      return;
+    }
+
+    if (action == _FeatureMenuAction.toggleSwing) {
+      final updated = await context
+          .read<FloorPlanProvider>()
+          .updateDoorOrientation(
+            featureId: feature.id,
+            swingSide:
+                feature.doorSwingSide == DoorSwingSide.left
+                    ? DoorSwingSide.right
+                    : DoorSwingSide.left,
+          );
+
+      if (mounted && !updated) {
+        _showMessage(
+          'La puerta seleccionada ya no está disponible.',
+          error: true,
+        );
+      }
+      return;
+    }
+
+    if (action != _FeatureMenuAction.continueScanning) {
       return;
     }
 
@@ -526,8 +597,7 @@ class _FloorPlanViewerScreenState
   // ===========================================================================
 
   Future<void>
-      _openMeasurementEditor({
-    String? roomId,
+      _openMeasurementEditor({    String? roomId,
   }) async {
     if (!mounted) {
       return;
@@ -1126,8 +1196,7 @@ class _FloorPlanViewerScreenState
                             Navigator.pop(
                               bottomSheetContext,
                             );
-                          },
-                          icon: const Icon(
+                          },                          icon: const Icon(
                             Icons.close,
                           ),
                         ),
@@ -1505,6 +1574,12 @@ class _RoomListAction {
   });
 }
 
+enum _FeatureMenuAction {
+  continueScanning,
+  toggleHinge,
+  toggleSwing,
+}
+
 class _FeatureSelection {
   final String roomId;
   final WallFeature feature;
@@ -1720,7 +1795,6 @@ class FloorPlanPainter
           )
           ..style =
               PaintingStyle.fill;
-
     final doorPaint =
         Paint()
           ..color =
@@ -2320,7 +2394,6 @@ class FloorPlanPainter
           angle < -math.pi / 2) {
         angle += math.pi;
       }
-
       canvas.save();
       canvas.translate(center.dx, center.dy);
       canvas.rotate(angle);
@@ -2647,7 +2720,7 @@ class FloorPlanPainter
         case FeatureType.door:
           _drawProfessionalDoor(
             canvas: canvas,
-            room: room,
+            feature: feature,
             start: start,
             end: end,
             paint: doorPaint,
@@ -2677,7 +2750,7 @@ class FloorPlanPainter
 
   void _drawProfessionalDoor({
     required Canvas canvas,
-    required RoomModel room,
+    required WallFeature feature,
     required Offset start,
     required Offset end,
     required Paint paint,
@@ -2690,13 +2763,18 @@ class FloorPlanPainter
     }
 
     final tangent = opening / width;
-    final inwardNormal = _roomInwardNormal(
-      room,
-      Offset(
-        (start.dx + end.dx) / 2,
-        (start.dy + end.dy) / 2,
-      ),
-    );
+    final leftNormal = Offset(-tangent.dy, tangent.dx);
+    final swingNormal =
+        feature.doorSwingSide == DoorSwingSide.left
+            ? leftNormal
+            : -leftNormal;
+    final hinge = feature.doorHingeSide == DoorHingeSide.start
+        ? start
+        : end;
+    final latch = feature.doorHingeSide == DoorHingeSide.start
+        ? end
+        : start;
+    final closedDirection = (latch - hinge) / width;
     final erasePaint = Paint()
       ..color = Colors.white
       ..strokeWidth = 7
@@ -2707,15 +2785,15 @@ class FloorPlanPainter
       ..strokeWidth = 2
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.square;
-    final leafEnd = start + inwardNormal * width;
+    final leafEnd = hinge + swingNormal * width;
 
     // Interrumpe gráficamente la pared en el ancho real de la puerta.
     canvas.drawLine(start, end, erasePaint);
 
-    // Hoja abierta a 90 grados hacia el interior del ambiente.
-    canvas.drawLine(start, leafEnd, symbolPaint);
+    // Hoja abierta a 90 grados según la orientación elegida.
+    canvas.drawLine(hinge, leafEnd, symbolPaint);
     canvas.drawCircle(
-      start,
+      hinge,
       2.5,
       Paint()
         ..color = paint.color
@@ -2723,12 +2801,12 @@ class FloorPlanPainter
     );
 
     final startAngle = math.atan2(
-      tangent.dy,
-      tangent.dx,
+      closedDirection.dy,
+      closedDirection.dx,
     );
     final inwardAngle = math.atan2(
-      inwardNormal.dy,
-      inwardNormal.dx,
+      swingNormal.dy,
+      swingNormal.dx,
     );
     final sweepAngle = _shortestSweep(
       startAngle,
@@ -2737,7 +2815,7 @@ class FloorPlanPainter
 
     canvas.drawArc(
       Rect.fromCircle(
-        center: start,
+        center: hinge,
         radius: width,
       ),
       startAngle,
@@ -2795,39 +2873,6 @@ class FloorPlanPainter
       end + normal * 5,
       symbolPaint,
     );
-  }
-
-  Offset _roomInwardNormal(
-    RoomModel room,
-    Offset openingMidpoint,
-  ) {
-    final points = room.points
-        .map(transform)
-        .toList(growable: false);
-    final wallIndex = _nearestWallIndex(
-      openingMidpoint,
-      points,
-    );
-
-    if (wallIndex < 0 || points.length < 3) {
-      return const Offset(0, 1);
-    }
-
-    final wall =
-        points[(wallIndex + 1) % points.length] -
-            points[wallIndex];
-    final wallLength = wall.distance;
-
-    if (wallLength <= 0.000001) {
-      return const Offset(0, 1);
-    }
-
-    final tangent = wall / wallLength;
-    final signedArea = _screenSignedArea(points);
-
-    return signedArea > 0
-        ? Offset(-tangent.dy, tangent.dx)
-        : Offset(tangent.dy, -tangent.dx);
   }
 
   double _shortestSweep(
