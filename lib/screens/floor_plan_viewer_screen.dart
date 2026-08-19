@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -596,8 +597,7 @@ class _FloorPlanViewerScreenState
               content: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [                    Text(                      '${localizations.wallLength}: '                      '${_formatLength(placement.wallLengthMeters, measurementSystem)}',
+                  crossAxisAlignment: CrossAxisAlignment.start,                  children: [                    Text(                      '${localizations.wallLength}: '                      '${_formatLength(placement.wallLengthMeters, measurementSystem)}',
                     ),
                     const SizedBox(height: 16),
                     lengthFields(
@@ -1054,10 +1054,13 @@ class _FloorPlanViewerScreenState
 
   Future<void> _showRoomTransformEditor() async {
     final provider = context.read<FloorPlanProvider>();
+    final localizations = AppLocalizations.of(context)!;
+    final measurementSystem =
+        context.read<MeasurementSettingsProvider>().system;
     final rooms = provider.completedRooms;
 
     if (rooms.isEmpty) {
-      _showMessage('No hay ambientes para editar.');
+      _showMessage(localizations.noRoomsToEdit);
       return;
     }
 
@@ -1066,7 +1069,9 @@ class _FloorPlanViewerScreenState
     )
         ? _selectedRoomId!
         : rooms.first.id;
-    var movementStep = 0.10;
+    var movementStep = measurementSystem == MeasurementSystem.metric
+        ? 0.10
+        : MeasurementUnits.inchesToMeters(3);
 
     setState(() {
       _selectedRoomId = selectedRoomId;
@@ -1127,24 +1132,23 @@ class _FloorPlanViewerScreenState
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Text(
-                    'Mover y rotar ambientes',
-                    style: TextStyle(
+                  Text(
+                    localizations.transformRoomsTitle,
+                    style: const TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                   const SizedBox(height: 8),
-                  const Text(
-                    'Si el ambiente está conectado mediante una abertura, '
-                    'todo el grupo se moverá o rotará como una sola unidad.',
+                  Text(
+                    localizations.connectedGroupTransformHint,
                   ),
                   const SizedBox(height: 18),
                   DropdownButtonFormField<String>(
                     value: selectedRoomId,
-                    decoration: const InputDecoration(
-                      labelText: 'Ambiente seleccionado',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: localizations.selectedRoom,
+                      border: const OutlineInputBorder(),
                     ),
                     items: rooms
                         .map(
@@ -1171,28 +1175,48 @@ class _FloorPlanViewerScreenState
                   const SizedBox(height: 14),
                   DropdownButtonFormField<double>(
                     value: movementStep,
-                    decoration: const InputDecoration(
-                      labelText: 'Distancia de cada movimiento',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: localizations.movementDistance,
+                      border: const OutlineInputBorder(),
                     ),
-                    items: const [
-                      DropdownMenuItem(
-                        value: 0.05,
-                        child: Text('5 centímetros'),
-                      ),
-                      DropdownMenuItem(
-                        value: 0.10,
-                        child: Text('10 centímetros'),
-                      ),
-                      DropdownMenuItem(
-                        value: 0.25,
-                        child: Text('25 centímetros'),
-                      ),
-                      DropdownMenuItem(
-                        value: 0.50,
-                        child: Text('50 centímetros'),
-                      ),
-                    ],
+                    items: measurementSystem == MeasurementSystem.metric
+                        ? [
+                            DropdownMenuItem(
+                              value: 0.05,
+                              child: Text(localizations.fiveCentimeters),
+                            ),
+                            DropdownMenuItem(
+                              value: 0.10,
+                              child: Text(localizations.tenCentimeters),
+                            ),
+                            DropdownMenuItem(
+                              value: 0.25,
+                              child: Text(
+                                localizations.twentyFiveCentimeters,
+                              ),
+                            ),
+                            DropdownMenuItem(
+                              value: 0.50,                              child: Text(localizations.fiftyCentimeters),
+                            ),
+                          ]
+                        : [
+                            DropdownMenuItem(
+                              value: MeasurementUnits.inchesToMeters(1),
+                              child: Text(localizations.oneInch),
+                            ),
+                            DropdownMenuItem(
+                              value: MeasurementUnits.inchesToMeters(3),
+                              child: Text(localizations.threeInches),
+                            ),
+                            DropdownMenuItem(
+                              value: MeasurementUnits.inchesToMeters(6),
+                              child: Text(localizations.sixInches),
+                            ),
+                            DropdownMenuItem(
+                              value: MeasurementUnits.metersPerFoot,
+                              child: Text(localizations.oneFoot),
+                            ),
+                          ],
                     onChanged: (step) {
                       if (step == null) {
                         return;
@@ -1203,10 +1227,10 @@ class _FloorPlanViewerScreenState
                     },
                   ),
                   const SizedBox(height: 18),
-                  const Text(
-                    'Movimiento',
+                  Text(
+                    localizations.movement,
                     textAlign: TextAlign.center,
-                    style: TextStyle(fontWeight: FontWeight.bold),
+                    style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 10),
                   Center(
@@ -1214,7 +1238,7 @@ class _FloorPlanViewerScreenState
                       children: [
                         movementButton(
                           icon: Icons.keyboard_arrow_up,
-                          tooltip: 'Mover hacia arriba',
+                          tooltip: localizations.moveUp,
                           onPressed: () async {
                             await moveRoom(
                               offsetX: 0,
@@ -1228,7 +1252,7 @@ class _FloorPlanViewerScreenState
                           children: [
                             movementButton(
                               icon: Icons.keyboard_arrow_left,
-                              tooltip: 'Mover hacia la izquierda',
+                              tooltip: localizations.moveLeft,
                               onPressed: () async {
                                 await moveRoom(
                                   offsetX: -movementStep,
@@ -1239,7 +1263,7 @@ class _FloorPlanViewerScreenState
                             const SizedBox(width: 8),
                             movementButton(
                               icon: Icons.keyboard_arrow_down,
-                              tooltip: 'Mover hacia abajo',
+                              tooltip: localizations.moveDown,
                               onPressed: () async {
                                 await moveRoom(
                                   offsetX: 0,
@@ -1250,7 +1274,7 @@ class _FloorPlanViewerScreenState
                             const SizedBox(width: 8),
                             movementButton(
                               icon: Icons.keyboard_arrow_right,
-                              tooltip: 'Mover hacia la derecha',
+                              tooltip: localizations.moveRight,
                               onPressed: () async {
                                 await moveRoom(
                                   offsetX: movementStep,
@@ -1264,10 +1288,10 @@ class _FloorPlanViewerScreenState
                     ),
                   ),
                   const SizedBox(height: 20),
-                  const Text(
-                    'Rotación',
+                  Text(
+                    localizations.rotation,
                     textAlign: TextAlign.center,
-                    style: TextStyle(fontWeight: FontWeight.bold),
+                    style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 10),
                   Row(
@@ -1278,8 +1302,8 @@ class _FloorPlanViewerScreenState
                             await rotateRoom(-15);
                           },
                           icon: const Icon(Icons.rotate_left),
-                          label: const Text(
-                            'Girar 15 grados a la izquierda',
+                          label: Text(
+                            localizations.rotateFifteenDegreesLeft,
                             textAlign: TextAlign.center,
                           ),
                         ),
@@ -1291,8 +1315,8 @@ class _FloorPlanViewerScreenState
                             await rotateRoom(15);
                           },
                           icon: const Icon(Icons.rotate_right),
-                          label: const Text(
-                            'Girar 15 grados a la derecha',
+                          label: Text(
+                            localizations.rotateFifteenDegreesRight,
                             textAlign: TextAlign.center,
                           ),
                         ),
@@ -1303,7 +1327,7 @@ class _FloorPlanViewerScreenState
                   FilledButton.icon(
                     onPressed: () => Navigator.of(bottomSheetContext).pop(),
                     icon: const Icon(Icons.check),
-                    label: const Text('Finalizar edición'),
+                    label: Text(localizations.finishEditing),
                   ),
                 ],
               ),
@@ -1320,6 +1344,7 @@ class _FloorPlanViewerScreenState
     final measurementSystem = context
         .watch<MeasurementSettingsProvider>()
         .system;
+    final localizations = AppLocalizations.of(context)!;
 
     return Scaffold(
       appBar: AppBar(
@@ -1332,7 +1357,7 @@ class _FloorPlanViewerScreenState
             icon: const Icon(
               Icons.open_with_rounded,
             ),
-            tooltip: 'Mover y rotar ambientes',
+            tooltip: localizations.transformRoomsTitle,
             onPressed: _showRoomTransformEditor,
           ),
           IconButton(
@@ -1770,8 +1795,7 @@ class _FloorPlanViewerScreenState
     final action =
         await showModalBottomSheet<
             _RoomListAction>(      context: context,
-      isScrollControlled: true,
-      builder: (
+      isScrollControlled: true,      builder: (
         bottomSheetContext,
       ) {
         return Consumer<
@@ -2371,7 +2395,6 @@ class FloorPlanPainter
   final Offset Function(
     ARPoint,
   ) transform;
-
   final String? selectedRoomId;
   final String? selectedFeatureId;
   final String Function(double)
@@ -2970,8 +2993,7 @@ class FloorPlanPainter
         featureStart +
             inwardNormal * extensionEndOffset,
         dimensionPaint,
-      );
-      canvas.drawLine(
+      );      canvas.drawLine(
         featureEnd,
         featureEnd +
             inwardNormal * extensionEndOffset,
