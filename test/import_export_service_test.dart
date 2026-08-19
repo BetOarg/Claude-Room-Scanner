@@ -268,5 +268,56 @@ void main() {
       expect(matches.length, greaterThanOrEqualTo(2));
       expect(positions.length, matches.length);
     });
+
+    test('traduce la leyenda del plano al inglés', () {
+      final room = RoomModel(
+        id: 'english-room',
+        name: 'Custom room name',
+        type: RoomType.cocina,
+        points: [
+          ARPoint(x: 0, y: 0, z: 0),
+          ARPoint(x: 2, y: 0, z: 0),
+          ARPoint(x: 2, y: 0, z: 2),
+        ],
+        isClosed: true,
+      );
+
+      final svg = ImportExportService.buildFloorPlanSvg(
+        [room],
+        MeasurementSystem.metric,
+        languageCode: 'en',
+      );
+
+      expect(svg, contains('Wall'));
+      expect(svg, contains('Door'));
+      expect(svg, contains('Window'));
+      expect(svg, isNot(contains('Pared')));
+      expect(svg, contains('Kitchen'));
+      expect(svg, contains('Custom room name'));
+    });
+
+    test('mantiene la leyenda española por defecto', () {
+      final room = RoomModel(
+        id: 'spanish-room',
+        name: 'Nombre personalizado',
+        type: RoomType.living,
+        points: [
+          ARPoint(x: 0, y: 0, z: 0),
+          ARPoint(x: 2, y: 0, z: 0),
+          ARPoint(x: 2, y: 0, z: 2),
+        ],
+        isClosed: true,
+      );
+
+      final svg = ImportExportService.buildFloorPlanSvg(
+        [room],
+        MeasurementSystem.metric,
+      );
+
+      expect(svg, contains('Pared'));
+      expect(svg, contains('Puerta'));
+      expect(svg, contains('Ventana'));
+      expect(svg, contains('Nombre personalizado'));
+    });
   });
 }
