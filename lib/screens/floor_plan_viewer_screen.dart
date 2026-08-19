@@ -547,8 +547,7 @@ class _FloorPlanViewerScreenState
               if (measurementSystem == MeasurementSystem.metric) {
                 return TextField(
                   controller: metric,
-                  keyboardType: const TextInputType.numberWithOptions(                    decimal: true,
-                  ),
+                  keyboardType: const TextInputType.numberWithOptions(                    decimal: true,                  ),
                   decoration: InputDecoration(
                     labelText: label,
                     suffixText: localizations.meters,
@@ -1097,8 +1096,7 @@ class _FloorPlanViewerScreenState
     if (!mounted) {
       return;
     }
-    _showMessage(
-      'Ambientes organizados correctamente.',
+    _showMessage(      'Ambientes organizados correctamente.',
     );
   }
   // ===========================================================================
@@ -1176,6 +1174,24 @@ class _FloorPlanViewerScreenState
               }
             }
 
+            Future<void> alignNearestWall() async {
+              final aligned = await provider.alignRoomToNearestWall(
+                roomId: selectedRoomId,
+              );
+              if (context.mounted) {
+                setModalState(() {});
+              }
+              if (!mounted) {
+                return;
+              }
+              _showMessage(
+                aligned
+                    ? localizations.wallAlignedSuccessfully
+                    : localizations.noSafeNearbyWall,
+                error: !aligned,
+              );
+            }
+
             Widget movementButton({
               required IconData icon,
               required String tooltip,
@@ -1243,6 +1259,12 @@ class _FloorPlanViewerScreenState
                         ),
                       ),
                     ],
+                  ),
+                  const SizedBox(height: 10),
+                  FilledButton.icon(
+                    onPressed: alignNearestWall,
+                    icon: const Icon(Icons.vertical_align_center),
+                    label: Text(localizations.alignNearestWall),
                   ),
                   const SizedBox(height: 18),
                   DropdownButtonFormField<String>(
@@ -1623,8 +1645,7 @@ class _FloorPlanViewerScreenState
 
                         final planePoint =
                             _inverseTransform(
-                          details                              .localPosition,
-                        );
+                          details                              .localPosition,                        );
 
                         final roomId =
                             _getRoomAtPosition(
@@ -2173,8 +2194,7 @@ class _FloorPlanViewerScreenState
       if (room.id ==
           roomId) {
         return room;
-      }
-    }
+      }    }
 
     return null;
   }
@@ -2723,8 +2743,7 @@ class FloorPlanPainter
       return;
     }
 
-    double x = 0.0;
-    double y = 0.0;
+    double x = 0.0;    double y = 0.0;
 
     for (final point
         in room.points) {
@@ -3273,8 +3292,7 @@ class FloorPlanPainter
     final dimensionPaint = Paint()
       ..color = color
       ..strokeWidth = 1.0
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.square;
+      ..style = PaintingStyle.stroke      ..strokeCap = StrokeCap.square;
 
     canvas.drawLine(
       start,
