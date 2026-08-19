@@ -12,6 +12,7 @@ import '../providers/measurement_settings_provider.dart';
 import '../services/geometry_service.dart';
 import '../services/import_export_service.dart';
 import '../services/ar_check_service.dart';
+import '../services/shared_wall_service.dart';
 import '../utils/measurement_units.dart';
 import 'measurement_editor_screen.dart';
 
@@ -546,8 +547,7 @@ class _FloorPlanViewerScreenState
             }) {
               if (measurementSystem == MeasurementSystem.metric) {
                 return TextField(
-                  controller: metric,
-                  keyboardType: const TextInputType.numberWithOptions(                    decimal: true,                  ),
+                  controller: metric,                  keyboardType: const TextInputType.numberWithOptions(                    decimal: true,                  ),
                   decoration: InputDecoration(
                     labelText: label,
                     suffixText: localizations.meters,
@@ -1096,8 +1096,7 @@ class _FloorPlanViewerScreenState
     if (!mounted) {
       return;
     }
-    _showMessage(      'Ambientes organizados correctamente.',
-    );
+    _showMessage(      'Ambientes organizados correctamente.',    );
   }
   // ===========================================================================
   // BUILD
@@ -1646,7 +1645,6 @@ class _FloorPlanViewerScreenState
                         final planePoint =
                             _inverseTransform(
                           details                              .localPosition,                        );
-
                         final roomId =
                             _getRoomAtPosition(
                           planePoint,
@@ -1698,6 +1696,8 @@ class _FloorPlanViewerScreenState
                               feature,
                               measurementSystem,
                             ),
+                            sharedWallLabel:
+                                localizations.sharedWall,
                           ),
                         ),
                       ),
@@ -2195,7 +2195,6 @@ class _FloorPlanViewerScreenState
           roomId) {
         return room;
       }    }
-
     return null;
   }
 
@@ -2507,6 +2506,29 @@ class _EmptyPlanView extends StatelessWidget {
 
 // =============================================================================
 // PAINTER// =============================================================================
+class _WallIdentity {
+  final String roomId;
+  final int wallIndex;
+
+  const _WallIdentity(this.roomId, this.wallIndex);
+
+  @override
+  bool operator ==(Object other) =>
+      other is _WallIdentity &&
+      other.roomId == roomId &&
+      other.wallIndex == wallIndex;
+
+  @override
+  int get hashCode => Object.hash(roomId, wallIndex);
+}
+
+class _WallInterval {
+  final double start;
+  final double end;
+
+  const _WallInterval(this.start, this.end);
+}
+
 class FloorPlanPainter
     extends CustomPainter {
   final List<RoomModel> rooms;
@@ -2522,6 +2544,7 @@ class FloorPlanPainter
       formatLength;
   final String Function(WallFeature)
       formatOpeningDimensions;
+  final String sharedWallLabel;
 
   const FloorPlanPainter({
     required this.rooms,
@@ -2529,6 +2552,7 @@ class FloorPlanPainter
     required this.formatArea,
     required this.formatLength,
     required this.formatOpeningDimensions,
+    required this.sharedWallLabel,
     this.selectedRoomId,
     this.selectedFeatureId,
   });
@@ -2610,6 +2634,19 @@ class FloorPlanPainter
     final dimensionedFeatureIds =
         <String>{};
     final featureOwnerRoomIds = <String, String>{};
+    final sharedWalls = SharedWallService.detect(rooms: rooms);
+    final hiddenWallIntervals =
+        _buildHiddenWallIntervals(sharedWalls);
+    final hiddenDimensionWalls = hiddenWallIntervals.entries
+        .where(
+          (entry) => entry.value.any(
+            (interval) =>
+                interval.start <= 0.000001 &&
+                interval.end >= 0.999999,
+          ),
+        )
+        .map((entry) => entry.key)
+        .toSet();
 
     for (final room in rooms) {
       for (final feature in room.features) {
@@ -2632,7 +2669,17 @@ class FloorPlanPainter
         wallPaint,
         roomFill,
         pointPaint,
+        hiddenWallIntervals,
       );
+
+    }
+
+    _drawSharedWalls(
+      canvas,
+      sharedWalls,
+    );
+
+    for (final room in rooms) {
 
       _drawRoomLabel(
         canvas,
@@ -2651,6 +2698,7 @@ class FloorPlanPainter
       _drawWallDimensions(
         canvas,
         room,
+        hiddenDimensionWalls,
       );
 
       _drawOpeningDimensions(
@@ -2658,6 +2706,10 @@ class FloorPlanPainter
         room,
         dimensionedFeatureIds,
       );
+    }
+
+    if (sharedWalls.isNotEmpty) {
+      _drawSharedWallLegend(canvas);
     }
   }
 
@@ -2671,6 +2723,7 @@ class FloorPlanPainter
     Paint wallPaint,
     Paint roomFill,
     Paint pointPaint,
+    Map<_WallIdentity, List<_WallInterval>> hiddenWallIntervals,
   ) {
     if (room.points.length < 2) {
       return;
@@ -2690,8 +2743,7 @@ class FloorPlanPainter
 
     for (
       int i = 1;
-      i < room.points.length;
-      i++
+      i < room.points.length;      i++
     ) {
       final next =
           transform(
@@ -2716,10 +2768,27 @@ class FloorPlanPainter
       );
     }
 
-    canvas.drawPath(
-      path,
-      wallPaint,
-    );
+    final wallCount = room.isClosed || room.points.length >= 3
+        ? room.points.length
+        : room.points.length - 1;
+    for (var wallIndex = 0;
+        wallIndex < wallCount;
+        wallIndex++) {
+      final wallStart = transform(room.points[wallIndex]);
+      final wallEnd = transform(
+        room.points[(wallIndex + 1) % room.points.length],
+      );
+      _drawVisibleWallParts(
+        canvas: canvas,
+        start: wallStart,
+        end: wallEnd,
+        paint: wallPaint,
+        hiddenIntervals: hiddenWallIntervals[
+              _WallIdentity(room.id, wallIndex)
+            ] ??
+            const [],
+      );
+    }
 
     for (final point
         in room.points) {
@@ -2729,6 +2798,141 @@ class FloorPlanPainter
         pointPaint,
       );
     }
+  }
+
+  Map<_WallIdentity, List<_WallInterval>> _buildHiddenWallIntervals(
+    List<SharedWallSegment> sharedWalls,
+  ) {
+    final intervals = <_WallIdentity, List<_WallInterval>>{};
+    for (final sharedWall in sharedWalls) {
+      final room = rooms.firstWhere(
+        (candidate) => candidate.id == sharedWall.secondRoomId,
+      );
+      final wallStart = room.points[sharedWall.secondWallIndex];
+      final wallEnd = room.points[
+        (sharedWall.secondWallIndex + 1) % room.points.length
+      ];
+      final dx = wallEnd.x - wallStart.x;
+      final dz = wallEnd.z - wallStart.z;
+      final lengthSquared = dx * dx + dz * dz;
+      if (lengthSquared <= 0.000001) {
+        continue;
+      }
+      double projection(ARPoint point) {
+        return (((point.x - wallStart.x) * dx +
+                    (point.z - wallStart.z) * dz) /
+                lengthSquared)
+            .clamp(0.0, 1.0)
+            .toDouble();
+      }
+
+      final first = projection(sharedWall.start);
+      final second = projection(sharedWall.end);
+      intervals
+          .putIfAbsent(
+            _WallIdentity(
+              sharedWall.secondRoomId,
+              sharedWall.secondWallIndex,
+            ),
+            () => [],
+          )
+          .add(
+            _WallInterval(
+              math.min(first, second),
+              math.max(first, second),
+            ),
+          );
+    }
+    return intervals;
+  }
+
+  void _drawVisibleWallParts({
+    required Canvas canvas,
+    required Offset start,
+    required Offset end,
+    required Paint paint,
+    required List<_WallInterval> hiddenIntervals,
+  }) {
+    if (hiddenIntervals.isEmpty) {
+      canvas.drawLine(start, end, paint);
+      return;
+    }
+
+    final sorted = List<_WallInterval>.from(hiddenIntervals)
+      ..sort((first, second) => first.start.compareTo(second.start));
+    var visibleStart = 0.0;
+    for (final interval in sorted) {
+      final hiddenStart = interval.start.clamp(0.0, 1.0).toDouble();
+      final hiddenEnd = interval.end.clamp(0.0, 1.0).toDouble();
+      if (hiddenStart > visibleStart + 0.000001) {
+        canvas.drawLine(
+          Offset.lerp(start, end, visibleStart)!,
+          Offset.lerp(start, end, hiddenStart)!,
+          paint,
+        );
+      }
+      visibleStart = math.max(visibleStart, hiddenEnd);
+    }
+    if (visibleStart < 1.0 - 0.000001) {
+      canvas.drawLine(
+        Offset.lerp(start, end, visibleStart)!,
+        end,
+        paint,
+      );
+    }
+  }
+
+  void _drawSharedWalls(
+    Canvas canvas,
+    List<SharedWallSegment> sharedWalls,
+  ) {
+    final paint = Paint()
+      ..color = const Color(0xFF00695C)
+      ..strokeWidth = 4.5
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+    for (final sharedWall in sharedWalls) {
+      canvas.drawLine(
+        transform(sharedWall.start),
+        transform(sharedWall.end),
+        paint,
+      );
+    }
+  }
+
+  void _drawSharedWallLegend(Canvas canvas) {
+    final textPainter = TextPainter(
+      text: TextSpan(
+        text: sharedWallLabel,
+        style: const TextStyle(
+          color: Color(0xFF00695C),
+          fontSize: 11,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    final background = Rect.fromLTWH(
+      10,
+      10,
+      textPainter.width + 30,
+      textPainter.height + 12,
+    );
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(background, const Radius.circular(8)),
+      Paint()..color = Colors.white.withOpacity(0.92),
+    );
+    canvas.drawLine(
+      Offset(17, background.center.dy),
+      Offset(31, background.center.dy),
+      Paint()
+        ..color = const Color(0xFF00695C)
+        ..strokeWidth = 4,
+    );
+    textPainter.paint(
+      canvas,
+      Offset(37, background.top + 6),
+    );
   }
 
   // ===========================================================================
@@ -2846,6 +3050,7 @@ class FloorPlanPainter
   void _drawWallDimensions(
     Canvas canvas,
     RoomModel room,
+    Set<_WallIdentity> hiddenDimensionWalls,
   ) {
     if (room.points.length < 3) {
       return;
@@ -2875,6 +3080,11 @@ class FloorPlanPainter
     for (var index = 0;
         index < room.points.length;
         index++) {
+      if (hiddenDimensionWalls.contains(
+        _WallIdentity(room.id, index),
+      )) {
+        continue;
+      }
       final nextIndex =
           (index + 1) % room.points.length;
       final start = screenPoints[index];
@@ -3082,8 +3292,7 @@ class FloorPlanPainter
           : Offset(
               -wallTangent.dy,
               wallTangent.dx,
-            );
-      final inwardNormal = -outwardNormal;
+            );      final inwardNormal = -outwardNormal;
       final featureTangent =
           featureDirection / featureScreenLength;
       const dimensionOffset = 14.0;
@@ -3632,8 +3841,7 @@ class FloorPlanPainter
     canvas.drawLine(
       start - normal * 5,
       start + normal * 5,
-      symbolPaint,
-    );
+      symbolPaint,    );
     canvas.drawLine(
       end - normal * 5,
       end + normal * 5,
