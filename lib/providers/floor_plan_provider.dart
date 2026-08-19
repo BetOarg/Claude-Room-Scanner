@@ -548,7 +548,6 @@ class FloorPlanProvider extends ChangeNotifier {
 
     double projectMinZ =
         double.infinity;
-
     for (final existing
         in _completedRooms) {
       for (final point
@@ -818,6 +817,221 @@ class FloorPlanProvider extends ChangeNotifier {
     await _persist();
   }
 
+  /// Alinea rígidamente el ambiente seleccionado con la pared externa más
+  /// cercana que sea paralela y tenga una superposición longitudinal útil.
+  /// El grupo conectado se transforma como una sola unidad.
+  Future<bool> alignRoomToNearestWall({
+    required String roomId,
+    double maximumDistanceMeters = 0.30,
+    double maximumAngleDegrees = 5.0,
+    double minimumOverlapMeters = 0.20,
+  }) async {
+    final sourceRoomIndex = _completedRooms.indexWhere(
+      (room) => room.id == roomId,
+    );
+    if (sourceRoomIndex == -1 ||
+        maximumDistanceMeters <= 0 ||
+        maximumAngleDegrees <= 0) {
+      return false;
+    }
+
+    final sourceRoom = _completedRooms[sourceRoomIndex];
+    final connectedIds = _connectedRoomIds(roomId);
+    if (sourceRoom.points.length < 2 || connectedIds.isEmpty) {
+      return false;
+    }
+
+    _WallAlignmentCandidate? bestCandidate;
+    final maximumAngleRadians =
+        maximumAngleDegrees * math.pi / 180.0;
+
+    for (var sourceIndex = 0;
+        sourceIndex < sourceRoom.points.length;
+        sourceIndex++) {
+      final sourceStart = sourceRoom.points[sourceIndex];
+      final sourceEnd = sourceRoom.points[
+        (sourceIndex + 1) % sourceRoom.points.length
+      ];
+      final sourceDx = sourceEnd.x - sourceStart.x;
+      final sourceDz = sourceEnd.z - sourceStart.z;
+      final sourceLength = math.sqrt(
+        sourceDx * sourceDx + sourceDz * sourceDz,
+      );
+      if (sourceLength <= 0.000001) {
+        continue;
+      }
+
+      final sourceUnitX = sourceDx / sourceLength;
+      final sourceUnitZ = sourceDz / sourceLength;
+      final sourceMidX = (sourceStart.x + sourceEnd.x) / 2.0;
+      final sourceMidZ = (sourceStart.z + sourceEnd.z) / 2.0;
+
+      for (final targetRoom in _completedRooms) {
+        if (connectedIds.contains(targetRoom.id) ||
+            targetRoom.points.length < 2) {
+          continue;
+        }
+
+        for (var targetIndex = 0;
+            targetIndex < targetRoom.points.length;
+            targetIndex++) {
+          final targetStart = targetRoom.points[targetIndex];
+          final targetEnd = targetRoom.points[
+            (targetIndex + 1) % targetRoom.points.length
+          ];
+          final targetDx = targetEnd.x - targetStart.x;
+          final targetDz = targetEnd.z - targetStart.z;
+          final targetLength = math.sqrt(
+            targetDx * targetDx + targetDz * targetDz,
+          );
+          if (targetLength <= 0.000001) {
+            continue;
+          }
+
+          var targetUnitX = targetDx / targetLength;
+          var targetUnitZ = targetDz / targetLength;
+          var targetOriginX = targetStart.x;
+          var targetOriginZ = targetStart.z;
+          var directionDot =
+              sourceUnitX * targetUnitX + sourceUnitZ * targetUnitZ;
+          if (directionDot < 0) {
+            targetUnitX = -targetUnitX;
+            targetUnitZ = -targetUnitZ;
+            targetOriginX = targetEnd.x;
+            targetOriginZ = targetEnd.z;
+            directionDot = -directionDot;
+          }
+          final angleRadians = math.acos(
+            directionDot.clamp(-1.0, 1.0).toDouble(),
+          );
+          if (angleRadians > maximumAngleRadians) {
+            continue;
+          }
+
+          final targetNormalX = -targetUnitZ;
+          final targetNormalZ = targetUnitX;
+          final signedDistance =
+              (sourceMidX - targetOriginX) * targetNormalX +
+                  (sourceMidZ - targetOriginZ) * targetNormalZ;
+          if (signedDistance.abs() > maximumDistanceMeters) {
+            continue;
+          }
+
+          final cross =
+              sourceUnitX * targetUnitZ - sourceUnitZ * targetUnitX;
+          final rotationRadians = math.atan2(cross, directionDot);
+          final sourceProjectionCenter =
+              (sourceMidX - targetOriginX) * targetUnitX +
+                  (sourceMidZ - targetOriginZ) * targetUnitZ;
+          final sourceProjectionStart =
+              sourceProjectionCenter - sourceLength / 2.0;
+          final sourceProjectionEnd =
+              sourceProjectionCenter + sourceLength / 2.0;
+          final overlap = math.min(
+                sourceProjectionEnd,
+                targetLength,
+              ) -
+              math.max(sourceProjectionStart, 0.0);
+          final requiredOverlap = math.min(
+            minimumOverlapMeters,
+            math.min(sourceLength, targetLength) * 0.25,
+          );
+          if (overlap < requiredOverlap) {
+            continue;
+          }
+
+          final sourceCenter = _roomCenter(sourceRoom);
+          final targetCenter = _roomCenter(targetRoom);
+          final cosine = math.cos(rotationRadians);
+          final sine = math.sin(rotationRadians);
+          final relativeCenterX = sourceCenter.x - sourceMidX;
+          final relativeCenterZ = sourceCenter.z - sourceMidZ;
+          final rotatedCenterX = sourceMidX +
+              relativeCenterX * cosine - relativeCenterZ * sine;
+          final rotatedCenterZ = sourceMidZ +
+              relativeCenterX * sine + relativeCenterZ * cosine;
+          final offsetX = -signedDistance * targetNormalX;
+          final offsetZ = -signedDistance * targetNormalZ;
+          final sourceSide =
+              (rotatedCenterX + offsetX - targetOriginX) *
+                      targetNormalX +
+                  (rotatedCenterZ + offsetZ - targetOriginZ) *
+                      targetNormalZ;
+          final targetSide =
+              (targetCenter.x - targetOriginX) * targetNormalX +
+                  (targetCenter.z - targetOriginZ) * targetNormalZ;
+          if (sourceSide * targetSide >= -0.000001) {
+            continue;
+          }
+
+          final score =
+              signedDistance.abs() + angleRadians * 0.10;
+          if (bestCandidate == null ||
+              score < bestCandidate.score) {
+            bestCandidate = _WallAlignmentCandidate(
+              centerX: sourceMidX,
+              centerZ: sourceMidZ,
+              rotationRadians: rotationRadians,
+              offsetX: offsetX,
+              offsetZ: offsetZ,
+              score: score,
+            );
+          }
+        }
+      }
+    }
+
+    final candidate = bestCandidate;
+    if (candidate == null ||
+        (candidate.rotationRadians.abs() <= 0.000001 &&
+            candidate.offsetX.abs() <= 0.000001 &&
+            candidate.offsetZ.abs() <= 0.000001)) {
+      return false;
+    }
+
+    final before = List<RoomModel>.from(_completedRooms);
+    for (var index = 0;
+        index < _completedRooms.length;
+        index++) {
+      final room = _completedRooms[index];
+      if (!connectedIds.contains(room.id)) {
+        continue;
+      }
+      final rotated = _rotateRoom(
+        room,
+        centerX: candidate.centerX,
+        centerZ: candidate.centerZ,
+        radians: candidate.rotationRadians,
+      );
+      _completedRooms[index] = _translateRoom(
+        rotated,
+        offsetX: candidate.offsetX,
+        offsetZ: candidate.offsetZ,
+      );
+    }
+
+    _recordTransform(before);
+    notifyListeners();
+    await _persist();
+    return true;
+  }
+
+  ARPoint _roomCenter(RoomModel room) {
+    final totalX = room.points.fold<double>(
+      0.0,
+      (sum, point) => sum + point.x,
+    );
+    final totalZ = room.points.fold<double>(
+      0.0,
+      (sum, point) => sum + point.z,
+    );
+    return ARPoint(
+      x: totalX / room.points.length,
+      y: 0.0,
+      z: totalZ / room.points.length,
+    );
+  }
+
   Future<bool> undoTransform() async {
     if (!canUndoTransform) {
       _clearTransformHistory();
@@ -882,8 +1096,7 @@ class FloorPlanProvider extends ChangeNotifier {
     for (var index = 0; index < first.length; index++) {
       if (!identical(first[index], second[index])) {
         return false;
-      }
-    }
+      }    }
     return true;
   }
 
@@ -1432,8 +1645,7 @@ class FloorPlanProvider extends ChangeNotifier {
                 2.0,
       );
 
-      int nearestWallIndex =
-          -1;
+      int nearestWallIndex =          -1;
 
       double nearestDistanceSquared =
           double.infinity;
@@ -1915,6 +2127,24 @@ class _TransformHistoryEntry {
   });
 }
 
+class _WallAlignmentCandidate {
+  final double centerX;
+  final double centerZ;
+  final double rotationRadians;
+  final double offsetX;
+  final double offsetZ;
+  final double score;
+
+  const _WallAlignmentCandidate({
+    required this.centerX,
+    required this.centerZ,
+    required this.rotationRadians,
+    required this.offsetX,
+    required this.offsetZ,
+    required this.score,
+  });
+}
+
 class _FeatureRemapResult {
   final List<WallFeature> features;
   final String? errorMessage;
@@ -1964,8 +2194,7 @@ class OpeningGeometryUpdateResult {
         errorMessage = null;
 
   const OpeningGeometryUpdateResult.invalid(this.errorMessage)
-      : isSuccess = false;
-}
+      : isSuccess = false;}
 
 class _WallProjection {
   final ARPoint start;
