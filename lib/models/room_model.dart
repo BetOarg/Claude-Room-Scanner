@@ -1,4 +1,4 @@
-ñimport 'package:vector_math/vector_math_64.dart' as vector;
+import 'package:vector_math/vector_math_64.dart' as vector;
 
 enum RoomType {
   // No cambiar el orden de los tipos históricos:
