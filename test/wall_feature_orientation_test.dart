@@ -13,6 +13,10 @@ void main() {
 
       expect(feature.doorHingeSide, DoorHingeSide.start);
       expect(feature.doorSwingSide, DoorSwingSide.left);
+      expect(
+        feature.doorOpeningDirection,
+        DoorOpeningDirection.interior,
+      );
       expect(feature.openingHeightMeters, closeTo(2.10, 0.000001));
       expect(feature.sillHeightMeters, closeTo(0, 0.000001));
     });
@@ -29,7 +33,7 @@ void main() {
       expect(feature.sillHeightMeters, closeTo(0.90, 0.000001));
     });
 
-    test('conserva bisagra y giro al exportar e importar', () {
+    test('conserva bisagra, giro y apertura al exportar e importar', () {
       final original = WallFeature(
         id: 'door-2',
         type: FeatureType.door,
@@ -37,6 +41,7 @@ void main() {
         end: ARPoint(x: 1.8, y: 0, z: 2),
         doorHingeSide: DoorHingeSide.end,
         doorSwingSide: DoorSwingSide.right,
+        doorOpeningDirection: DoorOpeningDirection.exterior,
         openingHeightMeters: 2.25,
         sillHeightMeters: 0.05,
       );
@@ -45,6 +50,10 @@ void main() {
 
       expect(restored.doorHingeSide, DoorHingeSide.end);
       expect(restored.doorSwingSide, DoorSwingSide.right);
+      expect(
+        restored.doorOpeningDirection,
+        DoorOpeningDirection.exterior,
+      );
       expect(restored.openingHeightMeters, closeTo(2.25, 0.000001));
       expect(restored.sillHeightMeters, closeTo(0.05, 0.000001));
     });
@@ -63,6 +72,10 @@ void main() {
 
       expect(updated.doorHingeSide, DoorHingeSide.end);
       expect(updated.doorSwingSide, DoorSwingSide.left);
+      expect(
+        updated.doorOpeningDirection,
+        DoorOpeningDirection.interior,
+      );
       expect(updated.start.x, original.start.x);
       expect(updated.end.x, original.end.x);
     });
