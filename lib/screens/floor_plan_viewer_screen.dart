@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -596,8 +597,7 @@ class _FloorPlanViewerScreenState
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(                      '${localizations.wallLength}: '                      '${_formatLength(placement.wallLengthMeters, measurementSystem)}',
+                  children: [                    Text(                      '${localizations.wallLength}: '                      '${_formatLength(placement.wallLengthMeters, measurementSystem)}',
                     ),
                     const SizedBox(height: 16),
                     lengthFields(
@@ -1052,6 +1052,268 @@ class _FloorPlanViewerScreenState
   // BUILD
   // ===========================================================================
 
+  Future<void> _showRoomTransformEditor() async {
+    final provider = context.read<FloorPlanProvider>();
+    final rooms = provider.completedRooms;
+
+    if (rooms.isEmpty) {
+      _showMessage('No hay ambientes para editar.');
+      return;
+    }
+
+    var selectedRoomId = rooms.any(
+      (room) => room.id == _selectedRoomId,
+    )
+        ? _selectedRoomId!
+        : rooms.first.id;
+    var movementStep = 0.10;
+
+    setState(() {
+      _selectedRoomId = selectedRoomId;
+      _selectedFeatureId = null;
+    });
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (bottomSheetContext) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            Future<void> moveRoom({
+              required double offsetX,
+              required double offsetZ,
+            }) async {
+              await provider.translateRoom(
+                roomId: selectedRoomId,
+                offsetX: offsetX,
+                offsetZ: offsetZ,
+              );
+            }
+
+            Future<void> rotateRoom(double angleDegrees) async {
+              await provider.rotateRoom(
+                roomId: selectedRoomId,
+                angleDegrees: angleDegrees,
+              );
+            }
+
+            Widget movementButton({
+              required IconData icon,
+              required String tooltip,
+              required VoidCallback onPressed,
+            }) {
+              return Tooltip(
+                message: tooltip,
+                child: SizedBox(
+                  width: 58,
+                  height: 50,
+                  child: OutlinedButton(
+                    onPressed: onPressed,
+                    child: Icon(icon),
+                  ),
+                ),
+              );
+            }
+
+            return SingleChildScrollView(
+              padding: EdgeInsets.fromLTRB(
+                20,
+                20,
+                20,
+                24 + MediaQuery.of(context).viewInsets.bottom,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text(
+                    'Mover y rotar ambientes',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Si el ambiente está conectado mediante una abertura, '
+                    'todo el grupo se moverá o rotará como una sola unidad.',
+                  ),
+                  const SizedBox(height: 18),
+                  DropdownButtonFormField<String>(
+                    value: selectedRoomId,
+                    decoration: const InputDecoration(
+                      labelText: 'Ambiente seleccionado',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: rooms
+                        .map(
+                          (room) => DropdownMenuItem<String>(
+                            value: room.id,
+                            child: Text(room.name),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (roomId) {
+                      if (roomId == null) {
+                        return;
+                      }
+
+                      setModalState(() {
+                        selectedRoomId = roomId;
+                      });
+                      setState(() {
+                        _selectedRoomId = roomId;
+                        _selectedFeatureId = null;
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 14),
+                  DropdownButtonFormField<double>(
+                    value: movementStep,
+                    decoration: const InputDecoration(
+                      labelText: 'Distancia de cada movimiento',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: const [
+                      DropdownMenuItem(
+                        value: 0.05,
+                        child: Text('5 centímetros'),
+                      ),
+                      DropdownMenuItem(
+                        value: 0.10,
+                        child: Text('10 centímetros'),
+                      ),
+                      DropdownMenuItem(
+                        value: 0.25,
+                        child: Text('25 centímetros'),
+                      ),
+                      DropdownMenuItem(
+                        value: 0.50,
+                        child: Text('50 centímetros'),
+                      ),
+                    ],
+                    onChanged: (step) {
+                      if (step == null) {
+                        return;
+                      }
+                      setModalState(() {
+                        movementStep = step;
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 18),
+                  const Text(
+                    'Movimiento',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 10),
+                  Center(
+                    child: Column(
+                      children: [
+                        movementButton(
+                          icon: Icons.keyboard_arrow_up,
+                          tooltip: 'Mover hacia arriba',
+                          onPressed: () async {
+                            await moveRoom(
+                              offsetX: 0,
+                              offsetZ: -movementStep,
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            movementButton(
+                              icon: Icons.keyboard_arrow_left,
+                              tooltip: 'Mover hacia la izquierda',
+                              onPressed: () async {
+                                await moveRoom(
+                                  offsetX: -movementStep,
+                                  offsetZ: 0,
+                                );
+                              },
+                            ),
+                            const SizedBox(width: 8),
+                            movementButton(
+                              icon: Icons.keyboard_arrow_down,
+                              tooltip: 'Mover hacia abajo',
+                              onPressed: () async {
+                                await moveRoom(
+                                  offsetX: 0,
+                                  offsetZ: movementStep,
+                                );
+                              },
+                            ),
+                            const SizedBox(width: 8),
+                            movementButton(
+                              icon: Icons.keyboard_arrow_right,
+                              tooltip: 'Mover hacia la derecha',
+                              onPressed: () async {
+                                await moveRoom(
+                                  offsetX: movementStep,
+                                  offsetZ: 0,
+                                );
+                              },
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  const Text(
+                    'Rotación',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () async {
+                            await rotateRoom(-15);
+                          },
+                          icon: const Icon(Icons.rotate_left),
+                          label: const Text(
+                            'Girar 15 grados a la izquierda',
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () async {
+                            await rotateRoom(15);
+                          },
+                          icon: const Icon(Icons.rotate_right),
+                          label: const Text(
+                            'Girar 15 grados a la derecha',
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 18),
+                  FilledButton.icon(
+                    onPressed: () => Navigator.of(bottomSheetContext).pop(),
+                    icon: const Icon(Icons.check),
+                    label: const Text('Finalizar edición'),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override  Widget build(
     BuildContext context,
   ) {
@@ -1066,6 +1328,13 @@ class _FloorPlanViewerScreenState
         ),
         centerTitle: true,
         actions: [
+          IconButton(
+            icon: const Icon(
+              Icons.open_with_rounded,
+            ),
+            tooltip: 'Mover y rotar ambientes',
+            onPressed: _showRoomTransformEditor,
+          ),
           IconButton(
             icon: const Icon(
               Icons.grid_view_rounded,
@@ -1526,8 +1795,7 @@ class _FloorPlanViewerScreenState
                   16,
                   24,
                 ),
-                child: Column(
-                  mainAxisSize:
+                child: Column(                  mainAxisSize:
                       MainAxisSize.min,
                   crossAxisAlignment:
                       CrossAxisAlignment
@@ -2126,8 +2394,7 @@ class FloorPlanPainter
   @override
   void paint(
     Canvas canvas,
-    Size size,
-  ) {
+    Size size,  ) {
     if (rooms.isEmpty) {
       return;
     }
@@ -2726,8 +2993,7 @@ class FloorPlanPainter
         dimensionEnd -
             inwardNormal * endMarkHalfLength,
         dimensionEnd +
-            inwardNormal * endMarkHalfLength,
-        dimensionPaint,
+            inwardNormal * endMarkHalfLength,        dimensionPaint,
       );
 
       final textPainter = TextPainter(
