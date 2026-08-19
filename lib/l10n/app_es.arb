@@ -1,4 +1,5 @@
 {
+
   "@@locale": "es",
   "appTitle": "Escáner de Ambientes AR",
   "newRoom": "Nuevo ambiente",
@@ -158,5 +159,27 @@
       "sill": {"type": "String"},
       "orientation": {"type": "String"}
     }
-  }
+  },
+  "noRoomsToEdit": "No hay ambientes para editar.",
+  "transformRoomsTitle": "Mover y rotar ambientes",
+  "connectedGroupTransformHint": "Si el ambiente está conectado mediante una abertura, todo el grupo se moverá o rotará como una sola unidad.",
+  "selectedRoom": "Ambiente seleccionado",
+  "movementDistance": "Distancia de cada movimiento",
+  "fiveCentimeters": "5 centímetros",
+  "tenCentimeters": "10 centímetros",
+  "twentyFiveCentimeters": "25 centímetros",
+  "fiftyCentimeters": "50 centímetros",
+  "oneInch": "1 pulgada",
+  "threeInches": "3 pulgadas",
+  "sixInches": "6 pulgadas",
+  "oneFoot": "1 pie",
+  "movement": "Movimiento",
+  "moveUp": "Mover hacia arriba",
+  "moveDown": "Mover hacia abajo",
+  "moveLeft": "Mover hacia la izquierda",
+  "moveRight": "Mover hacia la derecha",
+  "rotation": "Rotación",
+  "rotateFifteenDegreesLeft": "Girar 15 grados a la izquierda",
+  "rotateFifteenDegreesRight": "Girar 15 grados a la derecha",
+  "finishEditing": "Finalizar edición"
 }
