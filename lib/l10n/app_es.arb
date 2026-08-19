@@ -189,5 +189,6 @@
   "redoLastTransform": "Rehacer último ajuste",
   "alignNearestWall": "Alinear con la pared más cercana",
   "wallAlignedSuccessfully": "Las paredes se alinearon correctamente.",
-  "noSafeNearbyWall": "No se encontró una pared cercana y paralela que pueda alinearse de forma segura."
+  "noSafeNearbyWall": "No se encontró una pared cercana y paralela que pueda alinearse de forma segura.",
+  "sharedWall": "Pared compartida"
 }
