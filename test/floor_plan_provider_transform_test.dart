@@ -259,6 +259,82 @@ void main() {
       expect(provider.completedRooms[0].points.first.x, closeTo(0, 0.000001));
       expect(provider.completedRooms[1].points[1].x, closeTo(4, 0.000001));
     });
+
+    test('corrige un hueco pequeño entre paredes candidatas', () async {
+      final provider = FloorPlanProvider();
+      provider.loadProject(
+        uuid: 'project-small-gap',
+        name: 'Casa con hueco pequeño',
+        rooms: _connectedRooms()
+          ..add(_independentRoom(offsetX: 4.05)),
+      );
+
+      final result = await provider.correctSmallWallGap(
+        roomId: 'room-b',
+      );
+
+      expect(result, WallAlignmentResult.aligned);
+      expect(
+        provider.completedRooms[0].points.first.x,
+        closeTo(0.05, 0.000001),
+      );
+      expect(
+        provider.completedRooms[1].points[1].x,
+        closeTo(4.05, 0.000001),
+      );
+      expect(
+        provider.completedRooms[2].points.first.x,
+        closeTo(4.05, 0.000001),
+      );
+      expect(provider.canUndoTransform, isTrue);
+    });
+
+    test('ignora una separación mayor que el límite de hueco pequeño', () async {
+      final provider = FloorPlanProvider();
+      provider.loadProject(
+        uuid: 'project-large-gap',
+        name: 'Casa con separación amplia',
+        rooms: _connectedRooms()
+          ..add(_independentRoom(offsetX: 4.15)),
+      );
+
+      final result = await provider.correctSmallWallGap(
+        roomId: 'room-b',
+      );
+
+      expect(result, WallAlignmentResult.noCandidate);
+      expect(provider.completedRooms[1].points[1].x, closeTo(4, 0.000001));
+      expect(provider.canUndoTransform, isFalse);
+    });
+
+    test(
+      'informa cuando evita una corrección que produciría solapamiento',
+      () async {
+        final provider = FloorPlanProvider();
+        provider.loadProject(
+          uuid: 'project-small-gap-overlap',
+          name: 'Casa con corrección bloqueada',
+          rooms: _connectedRooms()
+            ..add(_independentRoom(offsetX: 4.05))
+            ..add(_diamondObstacle()),
+        );
+
+        final result = await provider.correctSmallWallGap(
+          roomId: 'room-b',
+        );
+
+        expect(result, WallAlignmentResult.overlapPrevented);
+        expect(
+          provider.completedRooms[0].points.first.x,
+          closeTo(0, 0.000001),
+        );
+        expect(
+          provider.completedRooms[1].points[1].x,
+          closeTo(4, 0.000001),
+        );
+        expect(provider.canUndoTransform, isFalse);
+      },
+    );
   });
 }
 
