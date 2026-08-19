@@ -2387,7 +2387,7 @@ class _OpeningDirectionPainter extends CustomPainter {
 class _EmptyPlanView extends StatelessWidget {
   const _EmptyPlanView();
 
-  @override  Widget build(
+  @override   Widget build(
     BuildContext context,
   ) {
     return const Center(
