@@ -597,8 +597,7 @@ class FloorPlanProvider extends ChangeNotifier {
       offsetX: offsetX,
       offsetZ: offsetZ,
     );
-  }  /// Organiza todas las habitaciones del proyecto en una fila.
-  ///  /// Esta función corrige proyectos históricos en los que cada habitación  /// fue escaneada comenzando en (0, 0, 0), produciendo superposición visual.
+  }  /// Organiza todas las habitaciones del proyecto en una fila.  ///  /// Esta función corrige proyectos históricos en los que cada habitación  /// fue escaneada comenzando en (0, 0, 0), produciendo superposición visual.
   ///
   /// La primera habitación comienza en X = 0 y las siguientes se colocan
   /// con [_defaultRoomSpacing] metros entre ellas.
@@ -890,6 +889,7 @@ class FloorPlanProvider extends ChangeNotifier {
     required String featureId,
     DoorHingeSide? hingeSide,
     DoorSwingSide? swingSide,
+    DoorOpeningDirection? openingDirection,
   }) async {
     var changed = false;
 
@@ -912,6 +912,7 @@ class FloorPlanProvider extends ChangeNotifier {
       features[featureIndex] = feature.copyWith(
         doorHingeSide: hingeSide,
         doorSwingSide: swingSide,
+        doorOpeningDirection: openingDirection,
       );
       _completedRooms[roomIndex] = room.copyWith(
         features: features,
@@ -1195,7 +1196,6 @@ class FloorPlanProvider extends ChangeNotifier {
               y: startLocation.y,
               z: startLocation.z,
             );
-
     final feature =        WallFeature(
       id: _nextUniqueId(),
       type: type,
@@ -1796,7 +1796,6 @@ class FloorPlanProvider extends ChangeNotifier {
   void clearProject() {
     _projectUuid = null;
     _completedRooms.clear();
-
     _projectName =
         'Mi Casa Completa';
 
