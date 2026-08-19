@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+
 import 'package:flutter/foundation.dart';
 
 import '../models/room_model.dart';
@@ -596,8 +597,7 @@ class FloorPlanProvider extends ChangeNotifier {
       offsetX: offsetX,
       offsetZ: offsetZ,
     );
-  }
-  /// Organiza todas las habitaciones del proyecto en una fila.
+  }  /// Organiza todas las habitaciones del proyecto en una fila.
   ///  /// Esta función corrige proyectos históricos en los que cada habitación  /// fue escaneada comenzando en (0, 0, 0), produciendo superposición visual.
   ///
   /// La primera habitación comienza en X = 0 y las siguientes se colocan
@@ -696,29 +696,159 @@ class FloorPlanProvider extends ChangeNotifier {
     required double offsetX,
     required double offsetZ,
   }) async {
-    final index =
-        _completedRooms.indexWhere(
-      (room) =>
-          room.id == roomId,
-    );
-
-    if (index == -1) {
+    if (!offsetX.isFinite ||
+        !offsetZ.isFinite) {
       return;
     }
 
-    final room =
-        _completedRooms[index];
+    final connectedIds =
+        _connectedRoomIds(roomId);
 
-    _completedRooms[index] =
-        _translateRoom(
-      room,
-      offsetX: offsetX,
-      offsetZ: offsetZ,
-    );
+    if (connectedIds.isEmpty) {
+      return;
+    }
+
+    for (var index = 0;
+        index < _completedRooms.length;
+        index++) {
+      final room = _completedRooms[index];
+
+      if (!connectedIds.contains(room.id)) {
+        continue;
+      }
+
+      _completedRooms[index] = _translateRoom(
+        room,
+        offsetX: offsetX,
+        offsetZ: offsetZ,
+      );
+    }
 
     notifyListeners();
 
     await _persist();
+  }
+
+  /// Rota rígidamente un ambiente y todo su grupo conectado.
+  ///
+  /// El centro de giro es el centro geométrico común de los puntos del grupo.
+  /// Las puertas y ventanas se transforman junto con los contornos, por lo que
+  /// las copias de una abertura compartida conservan el mismo ID y posición.
+  Future<void> rotateRoom({
+    required String roomId,
+    required double angleDegrees,
+  }) async {
+    if (!angleDegrees.isFinite) {
+      return;
+    }
+
+    final connectedIds = _connectedRoomIds(roomId);
+    if (connectedIds.isEmpty) {
+      return;
+    }
+
+    final groupPoints = <ARPoint>[
+      for (final room in _completedRooms)
+        if (connectedIds.contains(room.id)) ...room.points,
+    ];
+
+    if (groupPoints.isEmpty) {
+      return;
+    }
+
+    final centerX = groupPoints
+            .map((point) => point.x)
+            .reduce((value, element) => value + element) /
+        groupPoints.length;
+    final centerZ = groupPoints
+            .map((point) => point.z)
+            .reduce((value, element) => value + element) /
+        groupPoints.length;
+    final radians = angleDegrees * math.pi / 180.0;
+
+    for (var index = 0;
+        index < _completedRooms.length;
+        index++) {
+      final room = _completedRooms[index];
+
+      if (!connectedIds.contains(room.id)) {
+        continue;
+      }
+
+      _completedRooms[index] = _rotateRoom(
+        room,
+        centerX: centerX,
+        centerZ: centerZ,
+        radians: radians,
+      );
+    }
+
+    notifyListeners();
+    await _persist();
+  }
+
+  RoomModel _rotateRoom(
+    RoomModel room, {
+    required double centerX,
+    required double centerZ,
+    required double radians,
+  }) {
+    final cosine = math.cos(radians);
+    final sine = math.sin(radians);
+
+    ARPoint rotatePoint(ARPoint point) {
+      final relativeX = point.x - centerX;
+      final relativeZ = point.z - centerZ;
+
+      return ARPoint(
+        x: centerX + relativeX * cosine - relativeZ * sine,
+        y: point.y,
+        z: centerZ + relativeX * sine + relativeZ * cosine,
+      );
+    }
+
+    return room.copyWith(
+      points: room.points.map(rotatePoint).toList(),
+      features: room.features
+          .map(
+            (feature) => feature.copyWith(
+              start: rotatePoint(feature.start),
+              end: rotatePoint(feature.end),
+            ),
+          )
+          .toList(),
+    );
+  }
+
+  Set<String> _connectedRoomIds(String initialRoomId) {
+    if (!_completedRooms.any((room) => room.id == initialRoomId)) {
+      return <String>{};
+    }
+
+    final knownRoomIds = _completedRooms.map((room) => room.id).toSet();
+    final connectedIds = <String>{initialRoomId};
+    final pending = <String>[initialRoomId];
+
+    while (pending.isNotEmpty) {
+      final currentId = pending.removeLast();
+      final room = _completedRooms.firstWhere(
+        (candidate) => candidate.id == currentId,
+      );
+
+      for (final feature in room.features) {
+        final connectedRoomId = feature.connectedRoomId;
+
+        if (connectedRoomId == null ||
+            !knownRoomIds.contains(connectedRoomId) ||
+            !connectedIds.add(connectedRoomId)) {
+          continue;
+        }
+
+        pending.add(connectedRoomId);
+      }
+    }
+
+    return connectedIds;
   }
 
   // ===========================================================================
@@ -1066,8 +1196,7 @@ class FloorPlanProvider extends ChangeNotifier {
               z: startLocation.z,
             );
 
-    final feature =
-        WallFeature(
+    final feature =        WallFeature(
       id: _nextUniqueId(),
       type: type,
       start: startLocation,
@@ -1666,7 +1795,6 @@ class FloorPlanProvider extends ChangeNotifier {
 
   void clearProject() {
     _projectUuid = null;
-
     _completedRooms.clear();
 
     _projectName =
