@@ -184,5 +184,7 @@
   "rotation": "Rotación",
   "rotateFifteenDegreesLeft": "Girar 15 grados a la izquierda",
   "rotateFifteenDegreesRight": "Girar 15 grados a la derecha",
-  "finishEditing": "Finalizar edición"
+  "finishEditing": "Finalizar edición",
+  "undoLastTransform": "Deshacer último ajuste",
+  "redoLastTransform": "Rehacer último ajuste"
 }
