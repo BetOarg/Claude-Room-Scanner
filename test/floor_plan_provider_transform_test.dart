@@ -238,7 +238,43 @@ void main() {
       expect(provider.canUndoTransform, isFalse);
       expect(provider.completedRooms[1].points[1].x, closeTo(4, 0.000001));
     });
+
+    test('rechaza una alineación que solaparía otro ambiente', () async {
+      final provider = FloorPlanProvider();
+      final rooms = _connectedRooms()
+        ..add(_independentRoom(offsetX: 4.2))
+        ..add(_diamondObstacle());
+      provider.loadProject(
+        uuid: 'project-overlap-safe-alignment',
+        name: 'Casa con obstáculo',
+        rooms: rooms,
+      );
+
+      final aligned = await provider.alignRoomToNearestWall(
+        roomId: 'room-b',
+      );
+
+      expect(aligned, isFalse);
+      expect(provider.canUndoTransform, isFalse);
+      expect(provider.completedRooms[0].points.first.x, closeTo(0, 0.000001));
+      expect(provider.completedRooms[1].points[1].x, closeTo(4, 0.000001));
+    });
   });
+}
+
+RoomModel _diamondObstacle() {
+  return RoomModel(
+    id: 'room-d',
+    name: 'Obstáculo geométrico',
+    type: RoomType.pasillo,
+    points: [
+      ARPoint(x: 4.10, y: 0, z: 0.90),
+      ARPoint(x: 4.18, y: 0, z: 1.00),
+      ARPoint(x: 4.10, y: 0, z: 1.10),
+      ARPoint(x: 4.02, y: 0, z: 1.00),
+    ],
+    isClosed: true,
+  );
 }
 
 RoomModel _independentRoom({required double offsetX}) {
