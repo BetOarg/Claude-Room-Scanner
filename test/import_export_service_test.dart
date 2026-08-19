@@ -63,4 +63,88 @@ void main() {
       );
     });
   });
+
+  group('plano geométrico del PDF', () {
+    test('dibuja ambientes, puertas y ventanas', () {
+      final room = RoomModel(
+        id: 'room-svg',
+        name: 'Estar principal',
+        type: RoomType.living,
+        points: [
+          ARPoint(x: 0, y: 0, z: 0),
+          ARPoint(x: 4, y: 0, z: 0),
+          ARPoint(x: 4, y: 0, z: 3),
+          ARPoint(x: 0, y: 0, z: 3),
+        ],
+        features: [
+          WallFeature(
+            id: 'door-svg',
+            type: FeatureType.door,
+            start: ARPoint(x: 0.8, y: 0, z: 0),
+            end: ARPoint(x: 1.7, y: 0, z: 0),
+          ),
+          WallFeature(
+            id: 'window-svg',
+            type: FeatureType.window,
+            start: ARPoint(x: 4, y: 0, z: 0.8),
+            end: ARPoint(x: 4, y: 0, z: 2.0),
+          ),
+        ],
+        isClosed: true,
+      );
+
+      final svg = ImportExportService.buildFloorPlanSvg([room]);
+
+      expect(svg, contains('<polygon'));
+      expect(svg, contains('Estar principal'));
+      expect(svg, contains('data-feature-id="door-svg"'));
+      expect(svg, contains('data-feature-id="window-svg"'));
+      expect(svg, contains('#F57C00'));
+      expect(svg, contains('#C2185B'));
+    });
+
+    test('no duplica una abertura compartida entre ambientes', () {
+      final sharedDoor = WallFeature(
+        id: 'shared-door',
+        type: FeatureType.door,
+        start: ARPoint(x: 2, y: 0, z: 0.8),
+        end: ARPoint(x: 2, y: 0, z: 1.7),
+      );
+      final rooms = [
+        RoomModel(
+          id: 'room-a',
+          name: 'Ambiente A',
+          type: RoomType.living,
+          points: [
+            ARPoint(x: 0, y: 0, z: 0),
+            ARPoint(x: 2, y: 0, z: 0),
+            ARPoint(x: 2, y: 0, z: 2.5),
+            ARPoint(x: 0, y: 0, z: 2.5),
+          ],
+          features: [sharedDoor],
+          isClosed: true,
+        ),
+        RoomModel(
+          id: 'room-b',
+          name: 'Ambiente B',
+          type: RoomType.cocina,
+          points: [
+            ARPoint(x: 2, y: 0, z: 0),
+            ARPoint(x: 4, y: 0, z: 0),
+            ARPoint(x: 4, y: 0, z: 2.5),
+            ARPoint(x: 2, y: 0, z: 2.5),
+          ],
+          features: [sharedDoor],
+          isClosed: true,
+        ),
+      ];
+
+      final svg = ImportExportService.buildFloorPlanSvg(rooms);
+      final occurrences = RegExp(
+        'data-feature-id="shared-door"',
+      ).allMatches(svg).length;
+
+      expect(occurrences, 1);
+    });
+  });
 }
