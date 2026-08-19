@@ -1,4 +1,5 @@
 {
+
   "@@locale": "en",
   "appTitle": "Room Scanner AR",
   "newRoom": "New room",
@@ -158,5 +159,27 @@
       "sill": {"type": "String"},
       "orientation": {"type": "String"}
     }
-  }
+  },
+  "noRoomsToEdit": "There are no rooms to edit.",
+  "transformRoomsTitle": "Move and rotate rooms",
+  "connectedGroupTransformHint": "If the room is connected through an opening, the entire group will move or rotate as a single unit.",
+  "selectedRoom": "Selected room",
+  "movementDistance": "Distance of each movement",
+  "fiveCentimeters": "5 centimeters",
+  "tenCentimeters": "10 centimeters",
+  "twentyFiveCentimeters": "25 centimeters",
+  "fiftyCentimeters": "50 centimeters",
+  "oneInch": "1 inch",
+  "threeInches": "3 inches",
+  "sixInches": "6 inches",
+  "oneFoot": "1 foot",
+  "movement": "Movement",
+  "moveUp": "Move up",
+  "moveDown": "Move down",
+  "moveLeft": "Move left",
+  "moveRight": "Move right",
+  "rotation": "Rotation",
+  "rotateFifteenDegreesLeft": "Rotate 15 degrees to the left",
+  "rotateFifteenDegreesRight": "Rotate 15 degrees to the right",
+  "finishEditing": "Finish editing"
 }
