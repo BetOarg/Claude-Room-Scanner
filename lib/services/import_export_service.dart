@@ -284,6 +284,11 @@ class ImportExportService {
         'viewBox="0 0 $canvasWidth $canvasHeight">',
       )
       ..writeln('<rect width="760" height="500" fill="white"/>');
+    final labelLayout = _SvgLabelLayout(
+      canvasWidth: canvasWidth,
+      canvasHeight: canvasHeight,
+      bottomReserved: 34,
+    );
 
     final drawnWallKeys = <String>{};
     for (final room in rooms) {
@@ -335,6 +340,7 @@ class ImportExportService {
 
         _writeDimensionSvg(
           svg: svg,
+          layout: labelLayout,
           start: transform(first),
           end: transform(second),
           label: _formatCompactLength(
@@ -369,6 +375,7 @@ class ImportExportService {
 
         _writeDimensionSvg(
           svg: svg,
+          layout: labelLayout,
           start: start,
           end: end,
           label: _formatCompactLength(
@@ -509,6 +516,7 @@ class ImportExportService {
 
   static void _writeDimensionSvg({
     required StringBuffer svg,
+    required _SvgLabelLayout layout,
     required _SvgPoint start,
     required _SvgPoint end,
     required String label,
@@ -533,21 +541,34 @@ class ImportExportService {
       }
     }
 
-    final labelX = middleX + (normalX * offset);
-    final labelY = middleY + (normalY * offset);
     final labelWidth = math.max(28.0, (label.length * 5.6) + 8.0);
+    final placement = layout.place(
+      middle: _SvgPoint(middleX, middleY),
+      normal: _SvgPoint(normalX, normalY),
+      preferredOffset: offset,
+      width: labelWidth,
+      height: 12,
+    );
+    final labelX = placement.center.x;
+    final labelY = placement.center.y;
+    final actualOffset =
+        ((labelX - middleX) * normalX) +
+        ((labelY - middleY) * normalY);
+    final extensionOffset = actualOffset.abs() < 4
+        ? 4.0
+        : actualOffset - (actualOffset.sign * 3.0);
 
     svg
       ..writeln(
         '<line x1="${_svgNumber(start.x)}" y1="${_svgNumber(start.y)}" '
-        'x2="${_svgNumber(start.x + (normalX * (offset - 3)))}" '
-        'y2="${_svgNumber(start.y + (normalY * (offset - 3)))}" '
+        'x2="${_svgNumber(start.x + (normalX * extensionOffset))}" '
+        'y2="${_svgNumber(start.y + (normalY * extensionOffset))}" '
         'stroke="$color" stroke-width="0.7"/>',
       )
       ..writeln(
         '<line x1="${_svgNumber(end.x)}" y1="${_svgNumber(end.y)}" '
-        'x2="${_svgNumber(end.x + (normalX * (offset - 3)))}" '
-        'y2="${_svgNumber(end.y + (normalY * (offset - 3)))}" '
+        'x2="${_svgNumber(end.x + (normalX * extensionOffset))}" '
+        'y2="${_svgNumber(end.y + (normalY * extensionOffset))}" '
         'stroke="$color" stroke-width="0.7"/>',
       )
       ..writeln(
@@ -556,7 +577,9 @@ class ImportExportService {
         'height="12" rx="2" fill="white" fill-opacity="0.9"/>',
       )
       ..writeln(
-        '<text x="${_svgNumber(labelX)}" y="${_svgNumber(labelY + 2)}" '
+        '<text data-dimension-label="${_escapeSvg(label)}" '
+        'data-layout-index="${placement.index}" '
+        'x="${_svgNumber(labelX)}" y="${_svgNumber(labelY + 2)}" '
         'text-anchor="middle" font-family="Helvetica" font-size="8.5" '
         'font-weight="bold" fill="$color">${_escapeSvg(label)}</text>',
       );
@@ -713,4 +736,139 @@ class _SvgPoint {
   final double y;
 
   const _SvgPoint(this.x, this.y);
+}
+
+class _SvgLabelPlacement {
+  final _SvgPoint center;
+  final int index;
+
+  const _SvgLabelPlacement({
+    required this.center,
+    required this.index,
+  });
+}
+
+class _SvgLabelRect {
+  final double left;
+  final double top;
+  final double right;
+  final double bottom;
+
+  const _SvgLabelRect({
+    required this.left,
+    required this.top,
+    required this.right,
+    required this.bottom,
+  });
+
+  bool overlaps(_SvgLabelRect other) {
+    const separation = 2.0;
+    return left < other.right + separation &&
+        right > other.left - separation &&
+        top < other.bottom + separation &&
+        bottom > other.top - separation;
+  }
+}
+
+class _SvgLabelLayout {
+  final double canvasWidth;
+  final double canvasHeight;
+  final double bottomReserved;
+  final List<_SvgLabelRect> _occupied = [];
+  int _nextIndex = 0;
+
+  _SvgLabelLayout({
+    required this.canvasWidth,
+    required this.canvasHeight,
+    required this.bottomReserved,
+  });
+
+  _SvgLabelPlacement place({
+    required _SvgPoint middle,
+    required _SvgPoint normal,
+    required double preferredOffset,
+    required double width,
+    required double height,
+  }) {
+    final offsets = <double>[
+      preferredOffset,
+      -preferredOffset,
+      preferredOffset + 14,
+      -preferredOffset - 14,
+      preferredOffset + 28,
+      -preferredOffset - 28,
+      preferredOffset + 42,
+      -preferredOffset - 42,
+    ];
+
+    _SvgPoint? selectedCenter;
+    _SvgLabelRect? selectedRect;
+
+    for (final offset in offsets) {
+      final candidateCenter = _clampCenter(
+        _SvgPoint(
+          middle.x + (normal.x * offset),
+          middle.y + (normal.y * offset),
+        ),
+        width,
+        height,
+      );
+      final candidateRect = _rectFor(candidateCenter, width, height);
+
+      if (_occupied.every((rect) => !rect.overlaps(candidateRect))) {
+        selectedCenter = candidateCenter;
+        selectedRect = candidateRect;
+        break;
+      }
+    }
+
+    selectedCenter ??= _clampCenter(
+      _SvgPoint(
+        middle.x + (normal.x * offsets.last),
+        middle.y + (normal.y * offsets.last),
+      ),
+      width,
+      height,
+    );
+    selectedRect ??= _rectFor(selectedCenter, width, height);
+    _occupied.add(selectedRect);
+
+    return _SvgLabelPlacement(
+      center: selectedCenter,
+      index: _nextIndex++,
+    );
+  }
+
+  _SvgPoint _clampCenter(
+    _SvgPoint center,
+    double width,
+    double height,
+  ) {
+    const margin = 3.0;
+    final halfWidth = width / 2.0;
+    final halfHeight = height / 2.0;
+    return _SvgPoint(
+      center.x.clamp(
+        margin + halfWidth,
+        canvasWidth - margin - halfWidth,
+      ).toDouble(),
+      center.y.clamp(
+        margin + halfHeight,
+        canvasHeight - bottomReserved - halfHeight,
+      ).toDouble(),
+    );
+  }
+
+  _SvgLabelRect _rectFor(
+    _SvgPoint center,
+    double width,
+    double height,
+  ) {
+    return _SvgLabelRect(
+      left: center.x - (width / 2.0),
+      top: center.y - (height / 2.0),
+      right: center.x + (width / 2.0),
+      bottom: center.y + (height / 2.0),
+    );
+  }
 }
