@@ -1,4 +1,4 @@
-import 'package:vector_math/vector_math_64.dart' as vector;
+ñimport 'package:vector_math/vector_math_64.dart' as vector;
 
 enum RoomType {
   // No cambiar el orden de los tipos históricos:
@@ -73,6 +73,12 @@ enum DoorSwingSide {
   right,
 }
 
+/// Indica si la hoja abre hacia el interior o el exterior de la vivienda.
+enum DoorOpeningDirection {
+  interior,
+  exterior,
+}
+
 /// Lado de la abertura en el que se encuentra el ambiente por escanear.
 ///
 /// Se interpreta observando la abertura desde [WallFeature.start] hacia
@@ -144,6 +150,7 @@ class WallFeature {
   final OpeningConnectionSide? connectionSide;
   final DoorHingeSide doorHingeSide;
   final DoorSwingSide doorSwingSide;
+  final DoorOpeningDirection doorOpeningDirection;
   final double openingHeightMeters;
   final double sillHeightMeters;
 
@@ -156,6 +163,7 @@ class WallFeature {
     this.connectionSide,
     this.doorHingeSide = DoorHingeSide.start,
     this.doorSwingSide = DoorSwingSide.left,
+    this.doorOpeningDirection = DoorOpeningDirection.interior,
     double? openingHeightMeters,
     double? sillHeightMeters,
   })  : openingHeightMeters = openingHeightMeters ??
@@ -175,6 +183,7 @@ class WallFeature {
     OpeningConnectionSide? connectionSide,
     DoorHingeSide? doorHingeSide,
     DoorSwingSide? doorSwingSide,
+    DoorOpeningDirection? doorOpeningDirection,
     double? openingHeightMeters,
     double? sillHeightMeters,
   }) {
@@ -187,6 +196,8 @@ class WallFeature {
       connectionSide: connectionSide ?? this.connectionSide,
       doorHingeSide: doorHingeSide ?? this.doorHingeSide,
       doorSwingSide: doorSwingSide ?? this.doorSwingSide,
+      doorOpeningDirection:
+          doorOpeningDirection ?? this.doorOpeningDirection,
       openingHeightMeters:
           openingHeightMeters ?? this.openingHeightMeters,
       sillHeightMeters: sillHeightMeters ?? this.sillHeightMeters,
@@ -205,6 +216,7 @@ class WallFeature {
         'connectionSide': connectionSide!.name,
       'doorHingeSide': doorHingeSide.name,
       'doorSwingSide': doorSwingSide.name,
+      'doorOpeningDirection': doorOpeningDirection.name,
       'openingHeightMeters': openingHeightMeters,
       'sillHeightMeters': sillHeightMeters,
     };
@@ -216,6 +228,8 @@ class WallFeature {
     final sideName = json['connectionSide'] as String?;
     final hingeName = json['doorHingeSide'] as String?;
     final swingName = json['doorSwingSide'] as String?;
+    final openingDirectionName =
+        json['doorOpeningDirection'] as String?;
 
     OpeningConnectionSide? side;
 
@@ -248,6 +262,10 @@ class WallFeature {
       doorSwingSide: DoorSwingSide.values.firstWhere(
         (candidate) => candidate.name == swingName,
         orElse: () => DoorSwingSide.left,
+      ),
+      doorOpeningDirection: DoorOpeningDirection.values.firstWhere(
+        (candidate) => candidate.name == openingDirectionName,
+        orElse: () => DoorOpeningDirection.interior,
       ),
       openingHeightMeters:
           (json['openingHeightMeters'] as num?)?.toDouble(),
