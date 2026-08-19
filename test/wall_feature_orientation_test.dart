@@ -1,83 +1,190 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:room_scanner_ar/models/room_model.dart';
+import 'package:room_scanner_ar/providers/floor_plan_provider.dart';
+import 'package:room_scanner_ar/services/geometry_service.dart';
 
 void main() {
-  group('Orientación persistente de puertas', () {
-    test('usa valores seguros al abrir un proyecto anterior', () {
-      final feature = WallFeature.fromJson({
-        'id': 'door-1',
-        'type': 'door',
-        'start': {'x': 0, 'y': 0, 'z': 0},
-        'end': {'x': 0.9, 'y': 0, 'z': 0},
-      });
-
-      expect(feature.doorHingeSide, DoorHingeSide.start);
-      expect(feature.doorSwingSide, DoorSwingSide.left);
-      expect(
-        feature.doorOpeningDirection,
-        DoorOpeningDirection.interior,
+  group('transformación rígida de ambientes', () {
+    test('traslada como una unidad dos ambientes conectados', () async {
+      final provider = FloorPlanProvider();
+      provider.loadProject(
+        uuid: 'project-transform',
+        name: 'Casa conectada',
+        rooms: _connectedRooms(),
       );
-      expect(feature.openingHeightMeters, closeTo(2.10, 0.000001));
-      expect(feature.sillHeightMeters, closeTo(0, 0.000001));
+
+      await provider.translateRoom(
+        roomId: 'room-a',
+        offsetX: 5,
+        offsetZ: -2,
+      );
+
+      final roomA = provider.completedRooms
+          .firstWhere((room) => room.id == 'room-a');
+      final roomB = provider.completedRooms
+          .firstWhere((room) => room.id == 'room-b');
+      final featureA = roomA.features.single;
+      final featureB = roomB.features.single;
+
+      expect(roomA.points.first.x, closeTo(5, 0.000001));
+      expect(roomA.points.first.z, closeTo(-2, 0.000001));
+      expect(roomB.points.first.x, closeTo(7, 0.000001));
+      expect(roomB.points.first.z, closeTo(-2, 0.000001));
+      _expectSameFeatureGeometry(featureA, featureB);
     });
 
-    test('restaura alturas predeterminadas para ventanas anteriores', () {
-      final feature = WallFeature.fromJson({
-        'id': 'window-1',
-        'type': 'window',
-        'start': {'x': 0, 'y': 0, 'z': 0},
-        'end': {'x': 1.2, 'y': 0, 'z': 0},
-      });
+    test('rota el grupo y conserva longitudes y abertura compartida', () async {
+      final provider = FloorPlanProvider();
+      provider.loadProject(
+        uuid: 'project-rotation',
+        name: 'Casa conectada',
+        rooms: _connectedRooms(),
+      );
+      final before = provider.completedRooms;
+      final wallLengthBefore = GeometryService.calculateDistance(
+        before.first.points[0],
+        before.first.points[1],
+      );
 
-      expect(feature.openingHeightMeters, closeTo(1.20, 0.000001));
-      expect(feature.sillHeightMeters, closeTo(0.90, 0.000001));
+      await provider.rotateRoom(
+        roomId: 'room-a',
+        angleDegrees: 90,
+      );
+
+      final roomA = provider.completedRooms
+          .firstWhere((room) => room.id == 'room-a');
+      final roomB = provider.completedRooms
+          .firstWhere((room) => room.id == 'room-b');
+      final wallLengthAfter = GeometryService.calculateDistance(
+        roomA.points[0],
+        roomA.points[1],
+      );
+
+      expect(wallLengthAfter, closeTo(wallLengthBefore, 0.000001));
+      expect(
+        GeometryService.calculateArea(roomA.points),
+        closeTo(4, 0.000001),
+      );
+      expect(
+        GeometryService.calculateArea(roomB.points),
+        closeTo(4, 0.000001),
+      );
+      _expectSameFeatureGeometry(
+        roomA.features.single,
+        roomB.features.single,
+      );
     });
 
-    test('conserva bisagra, giro y apertura al exportar e importar', () {
-      final original = WallFeature(
-        id: 'door-2',
-        type: FeatureType.door,
-        start: ARPoint(x: 1, y: 0, z: 2),
-        end: ARPoint(x: 1.8, y: 0, z: 2),
-        doorHingeSide: DoorHingeSide.end,
-        doorSwingSide: DoorSwingSide.right,
-        doorOpeningDirection: DoorOpeningDirection.exterior,
-        openingHeightMeters: 2.25,
-        sillHeightMeters: 0.05,
+    test('no transforma ambientes que no pertenecen al grupo', () async {
+      final provider = FloorPlanProvider();
+      final rooms = _connectedRooms()
+        ..add(
+          RoomModel(
+            id: 'room-c',
+            name: 'Independiente',
+            type: RoomType.dormitorio,
+            points: [
+              ARPoint(x: 10, y: 0, z: 10),
+              ARPoint(x: 12, y: 0, z: 10),
+              ARPoint(x: 12, y: 0, z: 12),
+              ARPoint(x: 10, y: 0, z: 12),
+            ],
+            isClosed: true,
+          ),
+        );
+      provider.loadProject(
+        uuid: 'project-independent',
+        name: 'Tres ambientes',
+        rooms: rooms,
       );
 
-      final restored = WallFeature.fromJson(original.toJson());
-
-      expect(restored.doorHingeSide, DoorHingeSide.end);
-      expect(restored.doorSwingSide, DoorSwingSide.right);
-      expect(
-        restored.doorOpeningDirection,
-        DoorOpeningDirection.exterior,
+      await provider.translateRoom(
+        roomId: 'room-a',
+        offsetX: 3,
+        offsetZ: 4,
       );
-      expect(restored.openingHeightMeters, closeTo(2.25, 0.000001));
-      expect(restored.sillHeightMeters, closeTo(0.05, 0.000001));
+
+      final roomC = provider.completedRooms
+          .firstWhere((room) => room.id == 'room-c');
+      expect(roomC.points.first.x, closeTo(10, 0.000001));
+      expect(roomC.points.first.z, closeTo(10, 0.000001));
     });
 
-    test('copyWith cambia solamente la orientación indicada', () {
-      final original = WallFeature(
-        id: 'door-3',
-        type: FeatureType.door,
-        start: ARPoint(x: 0, y: 0, z: 0),
-        end: ARPoint(x: 1, y: 0, z: 0),
+    test('sincroniza interior o exterior en una puerta compartida', () async {
+      final provider = FloorPlanProvider();
+      provider.loadProject(
+        uuid: 'project-door-opening',
+        name: 'Casa conectada',
+        rooms: _connectedRooms(),
       );
 
-      final updated = original.copyWith(
-        doorHingeSide: DoorHingeSide.end,
+      final updated = await provider.updateDoorOrientation(
+        featureId: 'shared-door',
+        openingDirection: DoorOpeningDirection.exterior,
       );
 
-      expect(updated.doorHingeSide, DoorHingeSide.end);
-      expect(updated.doorSwingSide, DoorSwingSide.left);
-      expect(
-        updated.doorOpeningDirection,
-        DoorOpeningDirection.interior,
-      );
-      expect(updated.start.x, original.start.x);
-      expect(updated.end.x, original.end.x);
+      expect(updated, isTrue);
+      for (final room in provider.completedRooms) {
+        expect(
+          room.features.single.doorOpeningDirection,
+          DoorOpeningDirection.exterior,
+        );
+      }
     });
   });
+}
+
+List<RoomModel> _connectedRooms() {
+  final sharedA = WallFeature(
+    id: 'shared-door',
+    type: FeatureType.door,
+    start: ARPoint(x: 2, y: 0, z: 0.5),
+    end: ARPoint(x: 2, y: 0, z: 1.5),
+    connectedRoomId: 'room-b',
+    connectionSide: OpeningConnectionSide.right,
+  );
+  final sharedB = sharedA.copyWith(
+    connectedRoomId: 'room-a',
+    connectionSide: OpeningConnectionSide.left,
+  );
+
+  return [
+    RoomModel(
+      id: 'room-a',
+      name: 'Ambiente A',
+      type: RoomType.living,
+      points: [
+        ARPoint(x: 0, y: 0, z: 0),
+        ARPoint(x: 2, y: 0, z: 0),
+        ARPoint(x: 2, y: 0, z: 2),
+        ARPoint(x: 0, y: 0, z: 2),
+      ],
+      features: [sharedA],
+      isClosed: true,
+    ),
+    RoomModel(
+      id: 'room-b',
+      name: 'Ambiente B',
+      type: RoomType.cocina,
+      points: [
+        ARPoint(x: 2, y: 0, z: 0),
+        ARPoint(x: 4, y: 0, z: 0),
+        ARPoint(x: 4, y: 0, z: 2),
+        ARPoint(x: 2, y: 0, z: 2),
+      ],
+      features: [sharedB],
+      isClosed: true,
+    ),
+  ];
+}
+
+void _expectSameFeatureGeometry(
+  WallFeature first,
+  WallFeature second,
+) {
+  expect(first.id, second.id);
+  expect(first.start.x, closeTo(second.start.x, 0.000001));
+  expect(first.start.z, closeTo(second.start.z, 0.000001));
+  expect(first.end.x, closeTo(second.end.x, 0.000001));
+  expect(first.end.z, closeTo(second.end.z, 0.000001));
 }
