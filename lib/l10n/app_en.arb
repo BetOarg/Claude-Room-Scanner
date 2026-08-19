@@ -186,5 +186,8 @@
   "rotateFifteenDegreesRight": "Rotate 15 degrees to the right",
   "finishEditing": "Finish editing",
   "undoLastTransform": "Undo last adjustment",
-  "redoLastTransform": "Redo last adjustment"
+  "redoLastTransform": "Redo last adjustment",
+  "alignNearestWall": "Align with the nearest wall",
+  "wallAlignedSuccessfully": "The walls were aligned successfully.",
+  "noSafeNearbyWall": "No nearby parallel wall could be aligned safely."
 }
