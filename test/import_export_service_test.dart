@@ -65,6 +65,29 @@ void main() {
     });
   });
 
+  group('nombre del archivo PDF', () {
+    test('conserva un nombre normal y agrega la extensión PDF', () {
+      expect(
+        ImportExportService.buildPdfFileName('Casa familiar'),
+        'Casa familiar.pdf',
+      );
+    });
+
+    test('reutiliza la normalización segura del nombre JSON', () {
+      expect(
+        ImportExportService.buildPdfFileName('Casa: planta/alta?'),
+        'Casa_ planta_alta_.pdf',
+      );
+    });
+
+    test('usa un nombre seguro cuando el proyecto está vacío', () {
+      expect(
+        ImportExportService.buildPdfFileName('   '),
+        'Plano 2D.pdf',
+      );
+    });
+  });
+
   group('plano geométrico del PDF', () {
     test('dibuja ambientes, puertas y ventanas', () {
       final room = RoomModel(
