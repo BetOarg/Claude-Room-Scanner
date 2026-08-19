@@ -230,5 +230,43 @@ void main() {
       expect(svg, contains('ft'));
       expect(svg, contains('in'));
     });
+
+    test('reubica cotas coincidentes para evitar superposición', () {
+      final room = RoomModel(
+        id: 'compact-room',
+        name: 'Ambiente pequeño',
+        type: RoomType.pasillo,
+        points: [
+          ARPoint(x: 0, y: 0, z: 0),
+          ARPoint(x: 1, y: 0, z: 0),
+          ARPoint(x: 1, y: 0, z: 1),
+          ARPoint(x: 0, y: 0, z: 1),
+        ],
+        features: [
+          WallFeature(
+            id: 'full-width-door',
+            type: FeatureType.door,
+            start: ARPoint(x: 0, y: 0, z: 0),
+            end: ARPoint(x: 1, y: 0, z: 0),
+          ),
+        ],
+        isClosed: true,
+      );
+
+      final svg = ImportExportService.buildFloorPlanSvg(
+        [room],
+        MeasurementSystem.metric,
+      );
+      final matches = RegExp(
+        r'data-dimension-label="1 m" data-layout-index="(\d+)" '
+        r'x="([\d.]+)" y="([\d.]+)"',
+      ).allMatches(svg).toList();
+      final positions = matches
+          .map((match) => '${match.group(2)}:${match.group(3)}')
+          .toSet();
+
+      expect(matches.length, greaterThanOrEqualTo(2));
+      expect(positions.length, matches.length);
+    });
   });
 }
