@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:room_scanner_ar/models/room_model.dart';
 import 'package:room_scanner_ar/services/import_export_service.dart';
+import 'package:room_scanner_ar/utils/measurement_units.dart';
 
 void main() {
   test('JSON exporta versión, unidad y medidas verticales', () {
@@ -93,7 +94,10 @@ void main() {
         isClosed: true,
       );
 
-      final svg = ImportExportService.buildFloorPlanSvg([room]);
+      final svg = ImportExportService.buildFloorPlanSvg(
+        [room],
+        MeasurementSystem.metric,
+      );
 
       expect(svg, contains('<polygon'));
       expect(svg, contains('Estar principal'));
@@ -139,12 +143,69 @@ void main() {
         ),
       ];
 
-      final svg = ImportExportService.buildFloorPlanSvg(rooms);
+      final svg = ImportExportService.buildFloorPlanSvg(
+        rooms,
+        MeasurementSystem.metric,
+      );
       final occurrences = RegExp(
         'data-feature-id="shared-door"',
       ).allMatches(svg).length;
 
       expect(occurrences, 1);
+    });
+
+    test('incluye cotas métricas de paredes y aberturas', () {
+      final room = RoomModel(
+        id: 'dimensions-room',
+        name: 'Estudio',
+        type: RoomType.dormitorio,
+        points: [
+          ARPoint(x: 0, y: 0, z: 0),
+          ARPoint(x: 3, y: 0, z: 0),
+          ARPoint(x: 3, y: 0, z: 2),
+          ARPoint(x: 0, y: 0, z: 2),
+        ],
+        features: [
+          WallFeature(
+            id: 'dimension-door',
+            type: FeatureType.door,
+            start: ARPoint(x: 0.5, y: 0, z: 0),
+            end: ARPoint(x: 1.4, y: 0, z: 0),
+          ),
+        ],
+        isClosed: true,
+      );
+
+      final svg = ImportExportService.buildFloorPlanSvg(
+        [room],
+        MeasurementSystem.metric,
+      );
+
+      expect(svg, contains('3 m'));
+      expect(svg, contains('2 m'));
+      expect(svg, contains('0,9 m'));
+    });
+
+    test('las cotas del plano respetan el sistema imperial', () {
+      final room = RoomModel(
+        id: 'imperial-room',
+        name: 'Office',
+        type: RoomType.dormitorio,
+        points: [
+          ARPoint(x: 0, y: 0, z: 0),
+          ARPoint(x: 3.048, y: 0, z: 0),
+          ARPoint(x: 3.048, y: 0, z: 2),
+        ],
+        isClosed: true,
+      );
+
+      final svg = ImportExportService.buildFloorPlanSvg(
+        [room],
+        MeasurementSystem.imperial,
+      );
+
+      expect(svg, contains('ft'));
+      expect(svg, contains('in'));
     });
   });
 }
