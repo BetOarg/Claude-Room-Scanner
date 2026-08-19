@@ -179,7 +179,10 @@ class ImportExportService {
                   border: pw.Border.all(width: 0.6),
                 ),
                 child: pw.SvgImage(
-                  svg: buildFloorPlanSvg(rooms),
+                  svg: buildFloorPlanSvg(
+                    rooms,
+                    measurementSystem,
+                  ),
                 ),
               ),
               pw.SizedBox(height: 18),
@@ -200,7 +203,10 @@ class ImportExportService {
 
   /// Construye el dibujo vectorial del plano completo para incorporarlo al
   /// PDF. Mantiene las coordenadas globales y ajusta la escala a la página.
-  static String buildFloorPlanSvg(List<RoomModel> rooms) {
+  static String buildFloorPlanSvg(
+    List<RoomModel> rooms,
+    MeasurementSystem measurementSystem,
+  ) {
     const canvasWidth = 760.0;
     const canvasHeight = 500.0;
     const padding = 42.0;
@@ -258,6 +264,7 @@ class ImportExportService {
       )
       ..writeln('<rect width="760" height="500" fill="white"/>');
 
+    final drawnWallKeys = <String>{};
     for (final room in rooms) {
       if (room.points.length < 2) {
         continue;
@@ -297,6 +304,27 @@ class ImportExportService {
           'font-family="Helvetica" font-size="10" fill="#374151">'
           '${area.toStringAsFixed(2)} m²</text>',
         );
+
+      for (var index = 0; index < room.points.length; index++) {
+        final first = room.points[index];
+        final second = room.points[(index + 1) % room.points.length];
+        if (!drawnWallKeys.add(_wallKey(first, second))) {
+          continue;
+        }
+
+        _writeDimensionSvg(
+          svg: svg,
+          start: transform(first),
+          end: transform(second),
+          label: _formatCompactLength(
+            GeometryService.calculateDistance(first, second),
+            measurementSystem,
+          ),
+          color: '#1565C0',
+          center: _SvgPoint(centerX, centerY),
+          offset: 13,
+        );
+      }
     }
 
     final drawnFeatureIds = <String>{};
@@ -317,6 +345,20 @@ class ImportExportService {
         } else {
           _writeWindowSvg(svg, start, end);
         }
+
+        _writeDimensionSvg(
+          svg: svg,
+          start: start,
+          end: end,
+          label: _formatCompactLength(
+            GeometryService.calculateDistance(feature.start, feature.end),
+            measurementSystem,
+          ),
+          color: feature.type == FeatureType.door
+              ? '#F57C00'
+              : '#C2185B',
+          offset: 11,
+        );
 
         svg.writeln('</g>');
       }
@@ -444,6 +486,85 @@ class ImportExportService {
       );
   }
 
+  static void _writeDimensionSvg({
+    required StringBuffer svg,
+    required _SvgPoint start,
+    required _SvgPoint end,
+    required String label,
+    required String color,
+    required double offset,
+    _SvgPoint? center,
+  }) {
+    final dx = end.x - start.x;
+    final dy = end.y - start.y;
+    final length = math.max(math.sqrt((dx * dx) + (dy * dy)), 0.01);
+    var normalX = -dy / length;
+    var normalY = dx / length;
+    final middleX = (start.x + end.x) / 2.0;
+    final middleY = (start.y + end.y) / 2.0;
+
+    if (center != null) {
+      final towardCenterX = center.x - middleX;
+      final towardCenterY = center.y - middleY;
+      if ((normalX * towardCenterX) + (normalY * towardCenterY) > 0) {
+        normalX = -normalX;
+        normalY = -normalY;
+      }
+    }
+
+    final labelX = middleX + (normalX * offset);
+    final labelY = middleY + (normalY * offset);
+    final labelWidth = math.max(28.0, (label.length * 5.6) + 8.0);
+
+    svg
+      ..writeln(
+        '<line x1="${_svgNumber(start.x)}" y1="${_svgNumber(start.y)}" '
+        'x2="${_svgNumber(start.x + (normalX * (offset - 3)))}" '
+        'y2="${_svgNumber(start.y + (normalY * (offset - 3)))}" '
+        'stroke="$color" stroke-width="0.7"/>',
+      )
+      ..writeln(
+        '<line x1="${_svgNumber(end.x)}" y1="${_svgNumber(end.y)}" '
+        'x2="${_svgNumber(end.x + (normalX * (offset - 3)))}" '
+        'y2="${_svgNumber(end.y + (normalY * (offset - 3)))}" '
+        'stroke="$color" stroke-width="0.7"/>',
+      )
+      ..writeln(
+        '<rect x="${_svgNumber(labelX - (labelWidth / 2))}" '
+        'y="${_svgNumber(labelY - 7)}" width="${_svgNumber(labelWidth)}" '
+        'height="12" rx="2" fill="white" fill-opacity="0.9"/>',
+      )
+      ..writeln(
+        '<text x="${_svgNumber(labelX)}" y="${_svgNumber(labelY + 2)}" '
+        'text-anchor="middle" font-family="Helvetica" font-size="8.5" '
+        'font-weight="bold" fill="$color">${_escapeSvg(label)}</text>',
+      );
+  }
+
+  static String _wallKey(ARPoint first, ARPoint second) {
+    String pointKey(ARPoint point) =>
+        '${point.x.toStringAsFixed(4)}:${point.z.toStringAsFixed(4)}';
+    final firstKey = pointKey(first);
+    final secondKey = pointKey(second);
+    return firstKey.compareTo(secondKey) <= 0
+        ? '$firstKey|$secondKey'
+        : '$secondKey|$firstKey';
+  }
+
+  static String _formatCompactLength(
+    double meters,
+    MeasurementSystem measurementSystem,
+  ) {
+    return MeasurementUnits.formatLength(
+      meters,
+      measurementSystem,
+      metersLabel: 'm',
+      feetLabel: 'ft',
+      inchesLabel: 'in',
+      decimalSeparator: ',',
+    );
+  }
+
   static String _svgNumber(double value) => value.toStringAsFixed(2);
 
   static String _escapeSvg(String value) {
@@ -476,8 +597,7 @@ class ImportExportService {
             style: pw.TextStyle(
               fontSize: 14,
               fontWeight: pw.FontWeight.bold,
-            ),
-          ),
+            ),          ),
           pw.SizedBox(height: 5),
           pw.Text(
             'Superficie: ${_formatArea(area, measurementSystem)} · '
