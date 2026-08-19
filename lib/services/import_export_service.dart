@@ -1,19 +1,46 @@
 import 'dart:convert';
+import 'dart:io';
+
 import 'package:file_picker/file_picker.dart';
-import 'package:share_plus/share_plus.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
+import 'package:share_plus/share_plus.dart';
+
 import '../models/room_model.dart';
 import '../providers/floor_plan_provider.dart';
-import 'geometry_service.dart';
 import '../utils/measurement_units.dart';
+import 'geometry_service.dart';
 
 class ImportExportService {
-  /// Exporta el proyecto a un archivo JSON y abre el menú para compartir
-  static Future<void> exportToJson(List<RoomModel> rooms, String projectName) async {
+  /// Exporta el proyecto como un archivo JSON real y abre el menú para
+  /// compartirlo o guardarlo en el dispositivo.
+  static Future<void> exportToJson(
+    List<RoomModel> rooms,
+    String projectName,
+  ) async {
     final data = buildJsonData(rooms, projectName);
-    final jsonString = jsonEncode(data);
-    await Share.share(jsonString, subject: '$projectName - Plano 2D');
+    final jsonString = const JsonEncoder.withIndent('  ').convert(data);
+    final fileName = buildJsonFileName(projectName);
+    final temporaryDirectory = await getTemporaryDirectory();
+    final file = File('${temporaryDirectory.path}/$fileName');
+
+    await file.writeAsString(
+      jsonString,
+      encoding: utf8,
+      flush: true,
+    );
+
+    await Share.shareXFiles(
+      [
+        XFile(
+          file.path,
+          mimeType: 'application/json',
+          name: fileName,
+        ),
+      ],
+      subject: '$projectName - Plano 2D',
+    );
   }
 
   static Map<String, dynamic> buildJsonData(
@@ -28,29 +55,89 @@ class ImportExportService {
     };
   }
 
-  /// Importa un archivo JSON seleccionado desde el dispositivo
+  /// Construye un nombre de archivo válido para Android, iOS y los destinos
+  /// habituales del menú de compartir.
+  static String buildJsonFileName(String projectName) {
+    var safeName = projectName.trim();
+
+    safeName = safeName.replaceAll(
+      RegExp(r'[<>:"/\\|?*\x00-\x1F]'),
+      '_',
+    );
+    safeName = safeName.replaceAll(RegExp(r'\s+'), ' ');
+    safeName = safeName.replaceAll(RegExp(r'[. ]+$'), '');
+
+    if (safeName.isEmpty) {
+      safeName = 'Plano 2D';
+    }
+
+    if (safeName.length > 80) {
+      safeName = safeName.substring(0, 80).trimRight();
+    }
+
+    return '$safeName.json';
+  }
+
+  /// Importa un archivo JSON seleccionado desde el dispositivo.
+  ///
+  /// Admite tanto selectores que entregan el contenido en memoria como los
+  /// que entregan una ruta local, manteniendo compatibilidad en Android e iOS.
   static Future<bool> importFromJson(FloorPlanProvider provider) async {
     try {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['json'],
+        withData: true,
       );
 
-      if (result != null && result.files.single.bytes != null) {
-        final fileContent = utf8.decode(result.files.single.bytes!);
-        final data = jsonDecode(fileContent) as Map<String, dynamic>;
-
-        final projectName = data['projectName'] as String? ?? 'Proyecto Importado';
-        final roomsData = data['rooms'] as List;
-        final rooms = roomsData.map((r) => RoomModel.fromJson(r as Map<String, dynamic>)).toList();
-
-        await provider.loadExistingRooms(rooms, projectName);
-        return true;
+      if (result == null || result.files.isEmpty) {
+        return false;
       }
-    } catch (e) {
-      // Error al leer el archivo
+
+      final fileContent = await _readSelectedJson(result.files.single);
+      if (fileContent == null || fileContent.trim().isEmpty) {
+        return false;
+      }
+
+      final decoded = jsonDecode(fileContent);
+      if (decoded is! Map<String, dynamic>) {
+        return false;
+      }
+
+      final roomsData = decoded['rooms'];
+      if (roomsData is! List) {
+        return false;
+      }
+
+      final projectName =
+          decoded['projectName'] as String? ?? 'Proyecto Importado';
+      final rooms = roomsData
+          .map(
+            (room) => RoomModel.fromJson(
+              Map<String, dynamic>.from(room as Map),
+            ),
+          )
+          .toList();
+
+      await provider.loadExistingRooms(rooms, projectName);
+      return true;
+    } catch (_) {
+      return false;
     }
-    return false;
+  }
+
+  static Future<String?> _readSelectedJson(PlatformFile selectedFile) async {
+    final bytes = selectedFile.bytes;
+    if (bytes != null) {
+      return utf8.decode(bytes);
+    }
+
+    final path = selectedFile.path;
+    if (path == null || path.trim().isEmpty) {
+      return null;
+    }
+
+    return File(path).readAsString(encoding: utf8);
   }
 
   /// Genera un informe técnico del plano y abre la vista previa/impresión.
