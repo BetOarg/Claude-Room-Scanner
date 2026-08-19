@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
@@ -162,6 +163,27 @@ class ImportExportService {
               style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
             ),
             pw.SizedBox(height: 16),
+            if (rooms.any((room) => room.points.length >= 2)) ...[
+              pw.Text(
+                'Plano general',
+                style: pw.TextStyle(
+                  fontSize: 16,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
+              pw.SizedBox(height: 8),
+              pw.Container(
+                height: 390,
+                padding: const pw.EdgeInsets.all(8),
+                decoration: pw.BoxDecoration(
+                  border: pw.Border.all(width: 0.6),
+                ),
+                child: pw.SvgImage(
+                  svg: buildFloorPlanSvg(rooms),
+                ),
+              ),
+              pw.SizedBox(height: 18),
+            ],
             ...rooms.map(
               (room) => _buildRoomReport(
                 room,
@@ -174,6 +196,263 @@ class ImportExportService {
     );
 
     await Printing.layoutPdf(onLayout: (format) async => pdf.save());
+  }
+
+  /// Construye el dibujo vectorial del plano completo para incorporarlo al
+  /// PDF. Mantiene las coordenadas globales y ajusta la escala a la página.
+  static String buildFloorPlanSvg(List<RoomModel> rooms) {
+    const canvasWidth = 760.0;
+    const canvasHeight = 500.0;
+    const padding = 42.0;
+
+    final points = <ARPoint>[
+      for (final room in rooms) ...room.points,
+      for (final room in rooms)
+        for (final feature in room.features) ...[
+          feature.start,
+          feature.end,
+        ],
+    ];
+
+    if (points.isEmpty) {
+      return '<svg xmlns="http://www.w3.org/2000/svg" '
+          'viewBox="0 0 760 500"></svg>';
+    }
+
+    var minX = points.first.x;
+    var maxX = points.first.x;
+    var minZ = points.first.z;
+    var maxZ = points.first.z;
+
+    for (final point in points.skip(1)) {
+      minX = math.min(minX, point.x);
+      maxX = math.max(maxX, point.x);
+      minZ = math.min(minZ, point.z);
+      maxZ = math.max(maxZ, point.z);
+    }
+
+    final planWidth = math.max(maxX - minX, 0.01);
+    final planHeight = math.max(maxZ - minZ, 0.01);
+    final availableWidth = canvasWidth - (padding * 2);
+    final availableHeight = canvasHeight - (padding * 2);
+    final scale = math.min(
+      availableWidth / planWidth,
+      availableHeight / planHeight,
+    );
+    final offsetX =
+        padding + (availableWidth - (planWidth * scale)) / 2.0;
+    final offsetY =
+        padding + (availableHeight - (planHeight * scale)) / 2.0;
+
+    _SvgPoint transform(ARPoint point) {
+      return _SvgPoint(
+        offsetX + ((point.x - minX) * scale),
+        canvasHeight - offsetY - ((point.z - minZ) * scale),
+      );
+    }
+
+    final svg = StringBuffer()
+      ..writeln(
+        '<svg xmlns="http://www.w3.org/2000/svg" '
+        'viewBox="0 0 $canvasWidth $canvasHeight">',
+      )
+      ..writeln('<rect width="760" height="500" fill="white"/>');
+
+    for (final room in rooms) {
+      if (room.points.length < 2) {
+        continue;
+      }
+
+      final transformed = room.points.map(transform).toList();
+      final polygonPoints = transformed
+          .map((point) => '${_svgNumber(point.x)},${_svgNumber(point.y)}')
+          .join(' ');
+
+      svg.writeln(
+        '<polygon points="$polygonPoints" fill="#E3F2FD" '
+        'fill-opacity="0.34" stroke="#1565C0" stroke-width="3" '
+        'stroke-linejoin="round"/>',
+      );
+
+      final centerX = transformed
+              .map((point) => point.x)
+              .reduce((value, element) => value + element) /
+          transformed.length;
+      final centerY = transformed
+              .map((point) => point.y)
+              .reduce((value, element) => value + element) /
+          transformed.length;
+      final area = GeometryService.calculateArea(room.points);
+
+      svg
+        ..writeln(
+          '<text x="${_svgNumber(centerX)}" '
+          'y="${_svgNumber(centerY - 4)}" text-anchor="middle" '
+          'font-family="Helvetica" font-size="13" font-weight="bold" '
+          'fill="#1F2937">${_escapeSvg(room.name)}</text>',
+        )
+        ..writeln(
+          '<text x="${_svgNumber(centerX)}" '
+          'y="${_svgNumber(centerY + 13)}" text-anchor="middle" '
+          'font-family="Helvetica" font-size="10" fill="#374151">'
+          '${area.toStringAsFixed(2)} m²</text>',
+        );
+    }
+
+    final drawnFeatureIds = <String>{};
+    for (final room in rooms) {
+      for (final feature in room.features) {
+        if (!drawnFeatureIds.add(feature.id)) {
+          continue;
+        }
+
+        final start = transform(feature.start);
+        final end = transform(feature.end);
+        svg.writeln(
+          '<g data-feature-id="${_escapeSvg(feature.id)}">',
+        );
+
+        if (feature.type == FeatureType.door) {
+          _writeDoorSvg(svg, feature, start, end);
+        } else {
+          _writeWindowSvg(svg, start, end);
+        }
+
+        svg.writeln('</g>');
+      }
+    }
+
+    svg
+      ..writeln(
+        '<g font-family="Helvetica" font-size="10" fill="#374151">',
+      )
+      ..writeln(
+        '<line x1="42" y1="476" x2="66" y2="476" '
+        'stroke="#1565C0" stroke-width="3"/>',
+      )
+      ..writeln('<text x="72" y="480">Pared</text>')
+      ..writeln(
+        '<line x1="126" y1="476" x2="150" y2="476" '
+        'stroke="#F57C00" stroke-width="3"/>',
+      )
+      ..writeln('<text x="156" y="480">Puerta</text>')
+      ..writeln(
+        '<line x1="214" y1="476" x2="238" y2="476" '
+        'stroke="#C2185B" stroke-width="3"/>',
+      )
+      ..writeln('<text x="244" y="480">Ventana</text>')
+      ..writeln('</g>')
+      ..writeln('</svg>');
+
+    return svg.toString();
+  }
+
+  static void _writeDoorSvg(
+    StringBuffer svg,
+    WallFeature feature,
+    _SvgPoint start,
+    _SvgPoint end,
+  ) {
+    final hinge = feature.doorHingeSide == DoorHingeSide.start
+        ? start
+        : end;
+    final closedEnd = feature.doorHingeSide == DoorHingeSide.start
+        ? end
+        : start;
+    final dx = closedEnd.x - hinge.x;
+    final dy = closedEnd.y - hinge.y;
+    final direction = feature.doorSwingSide == DoorSwingSide.left
+        ? -1.0
+        : 1.0;
+    final openEnd = _SvgPoint(
+      hinge.x + (direction * -dy),
+      hinge.y + (direction * dx),
+    );
+    final radius = math.sqrt((dx * dx) + (dy * dy));
+    final sweep = direction > 0 ? 1 : 0;
+
+    svg
+      ..writeln(
+        '<line x1="${_svgNumber(start.x)}" y1="${_svgNumber(start.y)}" '
+        'x2="${_svgNumber(end.x)}" y2="${_svgNumber(end.y)}" '
+        'stroke="white" stroke-width="8"/>',
+      )
+      ..writeln(
+        '<line x1="${_svgNumber(hinge.x)}" '
+        'y1="${_svgNumber(hinge.y)}" '
+        'x2="${_svgNumber(openEnd.x)}" '
+        'y2="${_svgNumber(openEnd.y)}" '
+        'stroke="#F57C00" stroke-width="2.5"/>',
+      )
+      ..writeln(
+        '<path d="M ${_svgNumber(closedEnd.x)} ${_svgNumber(closedEnd.y)} '
+        'A ${_svgNumber(radius)} ${_svgNumber(radius)} 0 0 $sweep '
+        '${_svgNumber(openEnd.x)} ${_svgNumber(openEnd.y)}" '
+        'fill="none" stroke="#F57C00" stroke-width="1.4" '
+        'stroke-dasharray="4 3"/>',
+      )
+      ..writeln(
+        '<circle cx="${_svgNumber(hinge.x)}" '
+        'cy="${_svgNumber(hinge.y)}" r="2.4" fill="#F57C00"/>',
+      );
+  }
+
+  static void _writeWindowSvg(
+    StringBuffer svg,
+    _SvgPoint start,
+    _SvgPoint end,
+  ) {
+    final dx = end.x - start.x;
+    final dy = end.y - start.y;
+    final length = math.max(math.sqrt((dx * dx) + (dy * dy)), 0.01);
+    final normalX = (-dy / length) * 2.4;
+    final normalY = (dx / length) * 2.4;
+
+    svg
+      ..writeln(
+        '<line x1="${_svgNumber(start.x)}" y1="${_svgNumber(start.y)}" '
+        'x2="${_svgNumber(end.x)}" y2="${_svgNumber(end.y)}" '
+        'stroke="white" stroke-width="8"/>',
+      )
+      ..writeln(
+        '<line x1="${_svgNumber(start.x + normalX)}" '
+        'y1="${_svgNumber(start.y + normalY)}" '
+        'x2="${_svgNumber(end.x + normalX)}" '
+        'y2="${_svgNumber(end.y + normalY)}" '
+        'stroke="#C2185B" stroke-width="2"/>',
+      )
+      ..writeln(
+        '<line x1="${_svgNumber(start.x - normalX)}" '
+        'y1="${_svgNumber(start.y - normalY)}" '
+        'x2="${_svgNumber(end.x - normalX)}" '
+        'y2="${_svgNumber(end.y - normalY)}" '
+        'stroke="#C2185B" stroke-width="2"/>',
+      )
+      ..writeln(
+        '<line x1="${_svgNumber(start.x + normalX)}" '
+        'y1="${_svgNumber(start.y + normalY)}" '
+        'x2="${_svgNumber(start.x - normalX)}" '
+        'y2="${_svgNumber(start.y - normalY)}" '
+        'stroke="#C2185B" stroke-width="2"/>',
+      )
+      ..writeln(
+        '<line x1="${_svgNumber(end.x + normalX)}" '
+        'y1="${_svgNumber(end.y + normalY)}" '
+        'x2="${_svgNumber(end.x - normalX)}" '
+        'y2="${_svgNumber(end.y - normalY)}" '
+        'stroke="#C2185B" stroke-width="2"/>',
+      );
+  }
+
+  static String _svgNumber(double value) => value.toStringAsFixed(2);
+
+  static String _escapeSvg(String value) {
+    return value
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&apos;');
   }
 
   static pw.Widget _buildRoomReport(
@@ -285,4 +564,11 @@ class ImportExportService {
     return '${squareFeet.toStringAsFixed(2).replaceAll('.', ',')} '
         'pies cuadrados';
   }
+}
+
+class _SvgPoint {
+  final double x;
+  final double y;
+
+  const _SvgPoint(this.x, this.y);
 }
