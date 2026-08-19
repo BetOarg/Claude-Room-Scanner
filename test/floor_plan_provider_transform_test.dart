@@ -190,7 +190,70 @@ void main() {
       expect(await provider.undoTransform(), isFalse);
       expect(provider.completedRooms.first.name, 'Living principal');
     });
+
+    test('alinea paredes cercanas sin separar el grupo conectado', () async {
+      final provider = FloorPlanProvider();
+      final rooms = _connectedRooms()
+        ..add(_independentRoom(offsetX: 4.2));
+      provider.loadProject(
+        uuid: 'project-alignment',
+        name: 'Casa para alinear',
+        rooms: rooms,
+      );
+
+      final aligned = await provider.alignRoomToNearestWall(
+        roomId: 'room-b',
+      );
+
+      expect(aligned, isTrue);
+      expect(provider.completedRooms[0].points.first.x, closeTo(0.2, 0.000001));
+      expect(provider.completedRooms[1].points[1].x, closeTo(4.2, 0.000001));
+      expect(provider.completedRooms[2].points.first.x, closeTo(4.2, 0.000001));
+      _expectSameFeatureGeometry(
+        provider.completedRooms[0].features.single,
+        provider.completedRooms[1].features.single,
+      );
+
+      expect(provider.canUndoTransform, isTrue);
+      expect(await provider.undoTransform(), isTrue);
+      expect(provider.completedRooms[0].points.first.x, closeTo(0, 0.000001));
+      expect(provider.completedRooms[1].points[1].x, closeTo(4, 0.000001));
+    });
+
+    test('rechaza la alineación cuando no hay paredes cercanas', () async {
+      final provider = FloorPlanProvider();
+      final rooms = _connectedRooms()
+        ..add(_independentRoom(offsetX: 10));
+      provider.loadProject(
+        uuid: 'project-no-alignment',
+        name: 'Casa separada',
+        rooms: rooms,
+      );
+
+      final aligned = await provider.alignRoomToNearestWall(
+        roomId: 'room-b',
+      );
+
+      expect(aligned, isFalse);
+      expect(provider.canUndoTransform, isFalse);
+      expect(provider.completedRooms[1].points[1].x, closeTo(4, 0.000001));
+    });
   });
+}
+
+RoomModel _independentRoom({required double offsetX}) {
+  return RoomModel(
+    id: 'room-c',
+    name: 'Ambiente C',
+    type: RoomType.dormitorio,
+    points: [
+      ARPoint(x: offsetX, y: 0, z: 0),
+      ARPoint(x: offsetX + 2, y: 0, z: 0),
+      ARPoint(x: offsetX + 2, y: 0, z: 2),
+      ARPoint(x: offsetX, y: 0, z: 2),
+    ],
+    isClosed: true,
+  );
 }
 
 List<RoomModel> _connectedRooms() {
