@@ -40,4 +40,27 @@ void main() {
     expect(feature['openingHeightMeters'], closeTo(1.1, 0.000001));
     expect(feature['sillHeightMeters'], closeTo(0.85, 0.000001));
   });
+
+  group('nombre del archivo JSON', () {
+    test('conserva un nombre normal y agrega la extensión', () {
+      expect(
+        ImportExportService.buildJsonFileName('Casa familiar'),
+        'Casa familiar.json',
+      );
+    });
+
+    test('reemplaza caracteres inválidos para archivos', () {
+      expect(
+        ImportExportService.buildJsonFileName('Casa: planta/alta?'),
+        'Casa_ planta_alta_.json',
+      );
+    });
+
+    test('usa un nombre seguro cuando el proyecto está vacío', () {
+      expect(
+        ImportExportService.buildJsonFileName('   '),
+        'Plano 2D.json',
+      );
+    });
+  });
 }
