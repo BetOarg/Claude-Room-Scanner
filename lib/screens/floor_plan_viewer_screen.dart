@@ -323,11 +323,14 @@ class _FloorPlanViewerScreenState
                     child: OutlinedButton.icon(
                       onPressed: () => Navigator.pop(
                         bottomSheetContext,
-                        _FeatureMenuAction.toggleSwing,
+                        _FeatureMenuAction.chooseOpeningDirection,
                       ),
                       icon: const Icon(Icons.rotate_left),
                       label: Text(
-                        localizations.changeDoorOpeningDirection,
+                        feature.doorOpeningDirection ==
+                                DoorOpeningDirection.interior
+                            ? localizations.doorOpensInterior
+                            : localizations.doorOpensExterior,
                       ),
                     ),
                   ),
@@ -384,15 +387,18 @@ class _FloorPlanViewerScreenState
       return;
     }
 
-    if (action == _FeatureMenuAction.toggleSwing) {
+    if (action == _FeatureMenuAction.chooseOpeningDirection) {
+      final direction = await _chooseDoorOpeningDirection(feature);
+
+      if (!mounted || direction == null) {
+        return;
+      }
+
       final updated = await context
           .read<FloorPlanProvider>()
           .updateDoorOrientation(
             featureId: feature.id,
-            swingSide:
-                feature.doorSwingSide == DoorSwingSide.left
-                    ? DoorSwingSide.right
-                    : DoorSwingSide.left,
+            openingDirection: direction,
           );
 
       if (mounted && !updated) {
@@ -591,7 +597,6 @@ class _FloorPlanViewerScreenState
                 ],
               );
             }
-
             return AlertDialog(
               title: Text(localizations.editOpeningDimensions),
               content: SingleChildScrollView(
@@ -732,6 +737,55 @@ class _FloorPlanViewerScreenState
           : result.errorMessage ??
               localizations.invalidOpeningMeasurement,
       error: !result.isSuccess,
+    );
+  }
+
+  Future<DoorOpeningDirection?> _chooseDoorOpeningDirection(
+    WallFeature feature,
+  ) {
+    final localizations = AppLocalizations.of(context)!;
+
+    return showDialog<DoorOpeningDirection>(
+      context: context,
+      builder: (dialogContext) {
+        return SimpleDialog(
+          title: Text(
+            localizations.chooseDoorOpeningDirection,
+          ),
+          children: [
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(
+                dialogContext,
+                DoorOpeningDirection.interior,
+              ),
+              child: ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.home_outlined),
+                title: Text(localizations.doorOpensInterior),
+                trailing: feature.doorOpeningDirection ==
+                        DoorOpeningDirection.interior
+                    ? const Icon(Icons.check_circle)
+                    : null,
+              ),
+            ),
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(
+                dialogContext,
+                DoorOpeningDirection.exterior,
+              ),
+              child: ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.exit_to_app),
+                title: Text(localizations.doorOpensExterior),
+                trailing: feature.doorOpeningDirection ==
+                        DoorOpeningDirection.exterior
+                    ? const Icon(Icons.check_circle)
+                    : null,
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -1142,8 +1196,7 @@ class _FloorPlanViewerScreenState
                   const SizedBox(height: 8),
                   Text(
                     localizations.connectedGroupTransformHint,
-                  ),
-                  const SizedBox(height: 18),
+                  ),                  const SizedBox(height: 18),
                   DropdownButtonFormField<String>(
                     value: selectedRoomId,
                     decoration: InputDecoration(
@@ -1735,15 +1788,7 @@ class _FloorPlanViewerScreenState
                     bottomSheetContext,
                     FeatureType.door,                  );
                 },
-              ),
-              ListTile(
-                leading:
-                    const Icon(
-                  Icons.window,
-                  color:
-                      Colors.blue,
-                ),
-                title:
+                 title:
                     const Text(
                   'Ventana',
                 ),
@@ -2222,7 +2267,7 @@ enum _FeatureMenuAction {
   continueScanning,
   editGeometry,
   toggleHinge,
-  toggleSwing,
+  chooseOpeningDirection,
 }
 
 class _OpeningGeometryInput {
@@ -2342,8 +2387,7 @@ class _OpeningDirectionPainter extends CustomPainter {
 class _EmptyPlanView extends StatelessWidget {
   const _EmptyPlanView();
 
-  @override
-  Widget build(
+  @override  Widget build(
     BuildContext context,
   ) {
     return const Center(
@@ -2942,7 +2986,6 @@ class FloorPlanPainter
       if (wallIndex < 0) {
         continue;
       }
-
       final nextWallIndex =
           (wallIndex + 1) % roomScreenPoints.length;
       final wallDirection =
@@ -3411,10 +3454,14 @@ class FloorPlanPainter
 
     final tangent = opening / width;
     final leftNormal = Offset(-tangent.dy, tangent.dx);
-    final swingNormal =
+    final baseSwingNormal =
         feature.doorSwingSide == DoorSwingSide.left
             ? leftNormal
             : -leftNormal;
+    final swingNormal =
+        feature.doorOpeningDirection == DoorOpeningDirection.interior
+            ? baseSwingNormal
+            : -baseSwingNormal;
     final hinge = feature.doorHingeSide == DoorHingeSide.start
         ? start
         : end;
@@ -3538,7 +3585,6 @@ class FloorPlanPainter
 
     return sweep;
   }
-
   void _drawContinuationPoint(
     Canvas canvas,
     Offset point,
