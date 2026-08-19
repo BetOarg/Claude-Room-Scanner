@@ -547,8 +547,7 @@ class _FloorPlanViewerScreenState
               if (measurementSystem == MeasurementSystem.metric) {
                 return TextField(
                   controller: metric,
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
+                  keyboardType: const TextInputType.numberWithOptions(                    decimal: true,
                   ),
                   decoration: InputDecoration(
                     labelText: label,
@@ -597,6 +596,7 @@ class _FloorPlanViewerScreenState
                 ],
               );
             }
+
             return AlertDialog(
               title: Text(localizations.editOpeningDimensions),
               content: SingleChildScrollView(
@@ -1097,7 +1097,6 @@ class _FloorPlanViewerScreenState
     if (!mounted) {
       return;
     }
-
     _showMessage(
       'Ambientes organizados correctamente.',
     );
@@ -1196,7 +1195,8 @@ class _FloorPlanViewerScreenState
                   const SizedBox(height: 8),
                   Text(
                     localizations.connectedGroupTransformHint,
-                  ),                  const SizedBox(height: 18),
+                  ),
+                  const SizedBox(height: 18),
                   DropdownButtonFormField<String>(
                     value: selectedRoomId,
                     decoration: InputDecoration(
@@ -1645,8 +1645,7 @@ class _FloorPlanViewerScreenState
                             const EdgeInsets
                                 .symmetric(
                           horizontal: 12,
-                          vertical: 8,                        ),
-                        decoration:
+                          vertical: 8,                        ),                        decoration:
                             BoxDecoration(
                           color: Colors
                               .black
@@ -1788,7 +1787,15 @@ class _FloorPlanViewerScreenState
                     bottomSheetContext,
                     FeatureType.door,                  );
                 },
-                 title:
+              ),
+              ListTile(
+                leading:
+                    const Icon(
+                  Icons.window,
+                  color:
+                      Colors.blue,
+                ),
+                title:
                     const Text(
                   'Ventana',
                 ),
@@ -2187,8 +2194,7 @@ class _FloorPlanViewerScreenState
                 );
               },
               child: const Text(
-                'Guardar',
-              ),
+                'Guardar',              ),
             ),
           ],
         );
@@ -2387,7 +2393,8 @@ class _OpeningDirectionPainter extends CustomPainter {
 class _EmptyPlanView extends StatelessWidget {
   const _EmptyPlanView();
 
-  @override   Widget build(
+  @override
+  Widget build(
     BuildContext context,
   ) {
     return const Center(
@@ -2736,7 +2743,6 @@ class FloorPlanPainter
       height:
           textPainter.height + 10,
     );
-
     final backgroundPaint =
         Paint()
           ..color = Colors.white
@@ -2986,6 +2992,7 @@ class FloorPlanPainter
       if (wallIndex < 0) {
         continue;
       }
+
       final nextWallIndex =
           (wallIndex + 1) % roomScreenPoints.length;
       final wallDirection =
@@ -3285,8 +3292,7 @@ class FloorPlanPainter
     canvas.rotate(angle);
 
     final backgroundRect = Rect.fromCenter(
-      center: Offset.zero,
-      width: textPainter.width + 6,
+      center: Offset.zero,      width: textPainter.width + 6,
       height: textPainter.height + 3,
     );
     final backgroundPaint = Paint()
@@ -3585,6 +3591,7 @@ class FloorPlanPainter
 
     return sweep;
   }
+
   void _drawContinuationPoint(
     Canvas canvas,
     Offset point,
