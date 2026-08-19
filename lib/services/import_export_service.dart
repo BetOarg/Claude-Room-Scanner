@@ -158,13 +158,14 @@ class ImportExportService {
     String projectName,
     MeasurementSystem measurementSystem,
   ) async {
+    final labels = _PdfLabels.forLanguage(Platform.localeName);
     final pdfFileName = buildPdfFileName(projectName);
     final pdf = pw.Document(
       title: projectName.trim().isEmpty ? 'Plano 2D' : projectName.trim(),
       author: 'Claude Room Scanner',
       creator: 'Claude Room Scanner',
-      subject: 'Plano arquitectónico 2D',
-      keywords: 'plano, ambientes, puertas, ventanas, cotas',
+      subject: labels.documentSubject,
+      keywords: labels.documentKeywords,
     );
 
     pdf.addPage(
@@ -174,16 +175,16 @@ class ImportExportService {
           return [
             pw.Header(
               level: 0,
-              child: pw.Text('Plano arquitectónico: $projectName'),
+              child: pw.Text('${labels.architecturalPlan}: $projectName'),
             ),
             pw.Text(
-              'Ambientes relevados: ${rooms.length}',
+              '${labels.surveyedRooms}: ${rooms.length}',
               style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
             ),
             pw.SizedBox(height: 16),
             if (rooms.any((room) => room.points.length >= 2)) ...[
               pw.Text(
-                'Plano general',
+                labels.generalPlan,
                 style: pw.TextStyle(
                   fontSize: 16,
                   fontWeight: pw.FontWeight.bold,
@@ -200,6 +201,7 @@ class ImportExportService {
                   svg: buildFloorPlanSvg(
                     rooms,
                     measurementSystem,
+                    languageCode: labels.languageCode,
                   ),
                 ),
               ),
@@ -209,6 +211,7 @@ class ImportExportService {
               (room) => _buildRoomReport(
                 room,
                 measurementSystem,
+                labels,
               ),
             ),
           ];
@@ -226,8 +229,10 @@ class ImportExportService {
   /// PDF. Mantiene las coordenadas globales y ajusta la escala a la página.
   static String buildFloorPlanSvg(
     List<RoomModel> rooms,
-    MeasurementSystem measurementSystem,
-  ) {
+    MeasurementSystem measurementSystem, {
+    String languageCode = 'es',
+  }) {
+    final labels = _PdfLabels.forLanguage(languageCode);
     const canvasWidth = 760.0;
     const canvasHeight = 500.0;
     const padding = 42.0;
@@ -316,6 +321,16 @@ class ImportExportService {
               .reduce((value, element) => value + element) /
           transformed.length;
       final area = GeometryService.calculateArea(room.points);
+      final displayArea = measurementSystem == MeasurementSystem.metric
+          ? area
+          : MeasurementUnits.squareMetersToSquareFeet(area);
+      final areaText = displayArea.toStringAsFixed(2).replaceAll(
+            '.',
+            labels.decimalSeparator,
+          );
+      final areaUnit = measurementSystem == MeasurementSystem.metric
+          ? 'm²'
+          : 'ft²';
 
       svg
         ..writeln(
@@ -328,7 +343,8 @@ class ImportExportService {
           '<text x="${_svgNumber(centerX)}" '
           'y="${_svgNumber(centerY + 13)}" text-anchor="middle" '
           'font-family="Helvetica" font-size="10" fill="#374151">'
-          '${area.toStringAsFixed(2)} m²</text>',
+          '${_escapeSvg(labels.roomType(room.type))} · '
+          '$areaText $areaUnit</text>',
         );
 
       for (var index = 0; index < room.points.length; index++) {
@@ -400,17 +416,17 @@ class ImportExportService {
         '<line x1="42" y1="476" x2="66" y2="476" '
         'stroke="#1565C0" stroke-width="3"/>',
       )
-      ..writeln('<text x="72" y="480">Pared</text>')
+      ..writeln('<text x="72" y="480">${labels.wall}</text>')
       ..writeln(
         '<line x1="126" y1="476" x2="150" y2="476" '
         'stroke="#F57C00" stroke-width="3"/>',
       )
-      ..writeln('<text x="156" y="480">Puerta</text>')
+      ..writeln('<text x="156" y="480">${labels.door}</text>')
       ..writeln(
         '<line x1="214" y1="476" x2="238" y2="476" '
         'stroke="#C2185B" stroke-width="3"/>',
       )
-      ..writeln('<text x="244" y="480">Ventana</text>')
+      ..writeln('<text x="244" y="480">${labels.window}</text>')
       ..writeln('</g>')
       ..writeln('</svg>');
 
@@ -581,8 +597,7 @@ class ImportExportService {
         'data-layout-index="${placement.index}" '
         'x="${_svgNumber(labelX)}" y="${_svgNumber(labelY + 2)}" '
         'text-anchor="middle" font-family="Helvetica" font-size="8.5" '
-        'font-weight="bold" fill="$color">${_escapeSvg(label)}</text>',
-      );
+        'font-weight="bold" fill="$color">${_escapeSvg(label)}</text>',      );
   }
 
   static String _wallKey(ARPoint first, ARPoint second) {
@@ -623,6 +638,7 @@ class ImportExportService {
   static pw.Widget _buildRoomReport(
     RoomModel room,
     MeasurementSystem measurementSystem,
+    _PdfLabels labels,
   ) {
     final area = GeometryService.calculateArea(room.points);
     final perimeter = GeometryService.calculatePerimeter(room.points);
@@ -637,7 +653,7 @@ class ImportExportService {
         crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
           pw.Text(
-            '${room.name} · ${room.type.displayName}',
+            '${room.name} · ${labels.roomType(room.type)}',
             style: pw.TextStyle(
               fontSize: 14,
               fontWeight: pw.FontWeight.bold,
@@ -645,23 +661,26 @@ class ImportExportService {
           ),
           pw.SizedBox(height: 5),
           pw.Text(
-            'Superficie: ${_formatArea(area, measurementSystem)} · '
-            'Perímetro: ${_formatLength(perimeter, measurementSystem)}',
+            '${labels.area}: '
+            '${_formatArea(area, measurementSystem, labels)} · '
+            '${labels.perimeter}: '
+            '${_formatLength(perimeter, measurementSystem, labels)}',
           ),
-          pw.Text('Esquinas registradas: ${room.points.length}'),
+          pw.Text('${labels.registeredCorners}: ${room.points.length}'),
           pw.SizedBox(height: 8),
           pw.Text(
-            'Puertas y ventanas',
+            labels.doorsAndWindows,
             style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
           ),
           if (room.features.isEmpty)
-            pw.Text('No hay aberturas registradas.')
+            pw.Text(labels.noOpenings)
           else
             ...room.features.map(
               (feature) => pw.Bullet(
                 text: _featureDescription(
                   feature,
                   measurementSystem,
+                  labels,
                 ),
               ),
             ),
@@ -673,28 +692,31 @@ class ImportExportService {
   static String _featureDescription(
     WallFeature feature,
     MeasurementSystem measurementSystem,
+    _PdfLabels labels,
   ) {
     final width = GeometryService.calculateDistance(
       feature.start,
       feature.end,
     );
     final type = feature.type == FeatureType.door
-        ? 'Puerta'
-        : 'Ventana';
+        ? labels.door
+        : labels.window;
     final parts = <String>[
-      '$type: ${_formatLength(width, measurementSystem)} de ancho',
-      '${_formatLength(feature.openingHeightMeters, measurementSystem)} de alto',
+      '$type: ${_formatLength(width, measurementSystem, labels)} '
+          '${labels.wide}',
+      '${_formatLength(feature.openingHeightMeters, measurementSystem, labels)} '
+          '${labels.high}',
     ];
 
     if (feature.type == FeatureType.window) {
       parts.add(
-        '${_formatLength(feature.sillHeightMeters, measurementSystem)} '
-        'desde el piso',
+        '${_formatLength(feature.sillHeightMeters, measurementSystem, labels)} '
+        '${labels.fromFloor}',
       );
       parts.add(
         width >= feature.openingHeightMeters
-            ? 'orientación horizontal'
-            : 'orientación vertical',
+            ? labels.horizontalOrientation
+            : labels.verticalOrientation,
       );
     }
 
@@ -704,30 +726,129 @@ class ImportExportService {
   static String _formatLength(
     double meters,
     MeasurementSystem measurementSystem,
+    _PdfLabels labels,
   ) {
     return MeasurementUnits.formatLength(
       meters,
       measurementSystem,
-      metersLabel: 'metros',
-      feetLabel: 'pies',
-      inchesLabel: 'pulgadas',
-      decimalSeparator: ',',
+      metersLabel: labels.meters,
+      feetLabel: labels.feet,
+      inchesLabel: labels.inches,
+      decimalSeparator: labels.decimalSeparator,
     );
   }
 
   static String _formatArea(
     double squareMeters,
     MeasurementSystem measurementSystem,
+    _PdfLabels labels,
   ) {
     if (measurementSystem == MeasurementSystem.metric) {
-      return '${squareMeters.toStringAsFixed(2).replaceAll('.', ',')} '
-          'metros cuadrados';
+      final value = squareMeters.toStringAsFixed(2).replaceAll(
+            '.',
+            labels.decimalSeparator,
+          );
+      return '$value ${labels.squareMeters}';
     }
 
     final squareFeet =
         MeasurementUnits.squareMetersToSquareFeet(squareMeters);
-    return '${squareFeet.toStringAsFixed(2).replaceAll('.', ',')} '
-        'pies cuadrados';
+    final value = squareFeet.toStringAsFixed(2).replaceAll(
+          '.',
+          labels.decimalSeparator,
+        );
+    return '$value ${labels.squareFeet}';
+  }
+}
+
+class _PdfLabels {
+  final String languageCode;
+
+  const _PdfLabels._(this.languageCode);
+
+  factory _PdfLabels.forLanguage(String languageCode) {
+    return _PdfLabels._(
+      languageCode.toLowerCase().startsWith('en') ? 'en' : 'es',
+    );
+  }
+
+  bool get isEnglish => languageCode == 'en';
+  String get decimalSeparator => isEnglish ? '.' : ',';
+  String get architecturalPlan =>
+      isEnglish ? 'Architectural plan' : 'Plano arquitectónico';
+  String get surveyedRooms =>
+      isEnglish ? 'Surveyed rooms' : 'Ambientes relevados';
+  String get generalPlan => isEnglish ? 'General plan' : 'Plano general';
+  String get area => isEnglish ? 'Area' : 'Superficie';
+  String get perimeter => isEnglish ? 'Perimeter' : 'Perímetro';
+  String get registeredCorners =>
+      isEnglish ? 'Registered corners' : 'Esquinas registradas';
+  String get doorsAndWindows =>
+      isEnglish ? 'Doors and windows' : 'Puertas y ventanas';
+  String get noOpenings => isEnglish
+      ? 'There are no registered openings.'
+      : 'No hay aberturas registradas.';
+  String get wall => isEnglish ? 'Wall' : 'Pared';
+  String get door => isEnglish ? 'Door' : 'Puerta';
+  String get window => isEnglish ? 'Window' : 'Ventana';
+  String get wide => isEnglish ? 'wide' : 'de ancho';
+  String get high => isEnglish ? 'high' : 'de alto';
+  String get fromFloor => isEnglish ? 'from the floor' : 'desde el piso';
+  String get horizontalOrientation => isEnglish
+      ? 'horizontal orientation'
+      : 'orientación horizontal';
+  String get verticalOrientation => isEnglish
+      ? 'vertical orientation'
+      : 'orientación vertical';
+  String get meters => isEnglish ? 'meters' : 'metros';
+  String get feet => isEnglish ? 'feet' : 'pies';
+  String get inches => isEnglish ? 'inches' : 'pulgadas';
+  String get squareMeters =>
+      isEnglish ? 'square meters' : 'metros cuadrados';
+  String get squareFeet =>
+      isEnglish ? 'square feet' : 'pies cuadrados';
+  String get documentSubject => isEnglish
+      ? 'Two-dimensional architectural plan'
+      : 'Plano arquitectónico 2D';
+  String get documentKeywords => isEnglish
+      ? 'plan, rooms, doors, windows, dimensions'
+      : 'plano, ambientes, puertas, ventanas, cotas';
+
+  String roomType(RoomType type) {
+    if (!isEnglish) {
+      return type.displayName;
+    }
+
+    switch (type) {
+      case RoomType.living:
+        return 'Living room';
+      case RoomType.cocina:
+        return 'Kitchen';
+      case RoomType.bano:
+        return 'Bathroom';
+      case RoomType.dormitorio:
+        return 'Bedroom';
+      case RoomType.lavadero:
+        return 'Laundry room';
+      case RoomType.pasillo:
+        return 'Hallway';
+      case RoomType.comedor:
+        return 'Dining room';
+      case RoomType.comedorDiario:
+        return 'Breakfast room';
+      case RoomType.patio:
+        return 'Patio';
+      case RoomType.hall:
+        return 'Hall';
+      case RoomType.balcon:
+        return 'Balcony';
+      case RoomType.terraza:
+        return 'Terrace';
+      case RoomType.cochera:
+        return 'Garage';
+      case RoomType.playroom:
+        return 'Playroom';
+    }
   }
 }
 
