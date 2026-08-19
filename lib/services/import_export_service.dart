@@ -79,6 +79,17 @@ class ImportExportService {
     return '$safeName.json';
   }
 
+  /// Construye un nombre seguro para guardar o compartir el PDF desde el
+  /// diálogo nativo de Android o iOS.
+  static String buildPdfFileName(String projectName) {
+    final jsonFileName = buildJsonFileName(projectName);
+    final baseName = jsonFileName.substring(
+      0,
+      jsonFileName.length - '.json'.length,
+    );
+    return '$baseName.pdf';
+  }
+
   /// Importa un archivo JSON seleccionado desde el dispositivo.
   ///
   /// Admite tanto selectores que entregan el contenido en memoria como los
@@ -147,7 +158,14 @@ class ImportExportService {
     String projectName,
     MeasurementSystem measurementSystem,
   ) async {
-    final pdf = pw.Document();
+    final pdfFileName = buildPdfFileName(projectName);
+    final pdf = pw.Document(
+      title: projectName.trim().isEmpty ? 'Plano 2D' : projectName.trim(),
+      author: 'Claude Room Scanner',
+      creator: 'Claude Room Scanner',
+      subject: 'Plano arquitectónico 2D',
+      keywords: 'plano, ambientes, puertas, ventanas, cotas',
+    );
 
     pdf.addPage(
       pw.MultiPage(
@@ -198,7 +216,10 @@ class ImportExportService {
       ),
     );
 
-    await Printing.layoutPdf(onLayout: (format) async => pdf.save());
+    await Printing.layoutPdf(
+      name: pdfFileName,
+      onLayout: (format) async => pdf.save(),
+    );
   }
 
   /// Construye el dibujo vectorial del plano completo para incorporarlo al
@@ -597,7 +618,8 @@ class ImportExportService {
             style: pw.TextStyle(
               fontSize: 14,
               fontWeight: pw.FontWeight.bold,
-            ),          ),
+            ),
+          ),
           pw.SizedBox(height: 5),
           pw.Text(
             'Superficie: ${_formatArea(area, measurementSystem)} · '
