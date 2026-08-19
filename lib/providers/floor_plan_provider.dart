@@ -547,8 +547,7 @@ class FloorPlanProvider extends ChangeNotifier {
         double.negativeInfinity;
 
     double projectMinZ =
-        double.infinity;
-    for (final existing
+        double.infinity;    for (final existing
         in _completedRooms) {
       for (final point
           in existing.points) {
@@ -966,16 +965,23 @@ class FloorPlanProvider extends ChangeNotifier {
 
           final score =
               signedDistance.abs() + angleRadians * 0.10;
+          final candidate = _WallAlignmentCandidate(
+            centerX: sourceMidX,
+            centerZ: sourceMidZ,
+            rotationRadians: rotationRadians,
+            offsetX: offsetX,
+            offsetZ: offsetZ,
+            score: score,
+          );
+          if (_alignmentCreatesInteriorOverlap(
+            candidate: candidate,
+            connectedIds: connectedIds,
+          )) {
+            continue;
+          }
           if (bestCandidate == null ||
               score < bestCandidate.score) {
-            bestCandidate = _WallAlignmentCandidate(
-              centerX: sourceMidX,
-              centerZ: sourceMidZ,
-              rotationRadians: rotationRadians,
-              offsetX: offsetX,
-              offsetZ: offsetZ,
-              score: score,
-            );
+            bestCandidate = candidate;
           }
         }
       }
@@ -1014,6 +1020,171 @@ class FloorPlanProvider extends ChangeNotifier {
     notifyListeners();
     await _persist();
     return true;
+  }
+
+  bool _alignmentCreatesInteriorOverlap({
+    required _WallAlignmentCandidate candidate,
+    required Set<String> connectedIds,
+  }) {
+    final transformedRooms = <RoomModel>[
+      for (final room in _completedRooms)
+        if (connectedIds.contains(room.id))
+          _translateRoom(
+            _rotateRoom(
+              room,
+              centerX: candidate.centerX,
+              centerZ: candidate.centerZ,
+              radians: candidate.rotationRadians,
+            ),
+            offsetX: candidate.offsetX,
+            offsetZ: candidate.offsetZ,
+          ),
+    ];
+
+    for (final transformedRoom in transformedRooms) {
+      for (final fixedRoom in _completedRooms) {
+        if (connectedIds.contains(fixedRoom.id)) {
+          continue;
+        }
+        if (_polygonsHaveInteriorOverlap(
+          transformedRoom.points,
+          fixedRoom.points,
+        )) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  bool _polygonsHaveInteriorOverlap(
+    List<ARPoint> first,
+    List<ARPoint> second,
+  ) {
+    if (first.length < 3 || second.length < 3) {
+      return false;
+    }
+
+    for (var firstIndex = 0;
+        firstIndex < first.length;
+        firstIndex++) {
+      final firstStart = first[firstIndex];
+      final firstEnd = first[(firstIndex + 1) % first.length];
+      for (var secondIndex = 0;
+          secondIndex < second.length;
+          secondIndex++) {
+        final secondStart = second[secondIndex];
+        final secondEnd = second[(secondIndex + 1) % second.length];
+        if (_segmentsCrossProperly(
+          firstStart,
+          firstEnd,
+          secondStart,
+          secondEnd,
+        )) {
+          return true;
+        }
+      }
+    }
+
+    if (first.any((point) => _pointStrictlyInsidePolygon(point, second)) ||
+        second.any((point) => _pointStrictlyInsidePolygon(point, first))) {
+      return true;
+    }
+
+    return _pointStrictlyInsidePolygon(_roomPointsCenter(first), second) ||
+        _pointStrictlyInsidePolygon(_roomPointsCenter(second), first);
+  }
+
+  bool _segmentsCrossProperly(
+    ARPoint firstStart,    ARPoint firstEnd,
+    ARPoint secondStart,
+    ARPoint secondEnd,
+  ) {
+    final firstSideStart =
+        _crossProduct(firstStart, firstEnd, secondStart);
+    final firstSideEnd =
+        _crossProduct(firstStart, firstEnd, secondEnd);
+    final secondSideStart =
+        _crossProduct(secondStart, secondEnd, firstStart);
+    final secondSideEnd =
+        _crossProduct(secondStart, secondEnd, firstEnd);
+    const tolerance = 0.000001;
+    return firstSideStart * firstSideEnd < -tolerance &&
+        secondSideStart * secondSideEnd < -tolerance;
+  }
+
+  bool _pointStrictlyInsidePolygon(
+    ARPoint point,
+    List<ARPoint> polygon,
+  ) {
+    const boundaryToleranceSquared = 0.000001;
+    var inside = false;
+    for (var index = 0; index < polygon.length; index++) {
+      final start = polygon[index];
+      final end = polygon[(index + 1) % polygon.length];
+      if (_distanceSquaredToSegment(point, start, end) <=
+          boundaryToleranceSquared) {
+        return false;
+      }
+      final crossesRay = (start.z > point.z) != (end.z > point.z);
+      if (!crossesRay) {
+        continue;
+      }
+      final crossingX = start.x +
+          (point.z - start.z) *
+              (end.x - start.x) /
+              (end.z - start.z);
+      if (crossingX > point.x) {
+        inside = !inside;
+      }
+    }
+    return inside;
+  }
+
+  double _crossProduct(ARPoint start, ARPoint end, ARPoint point) {
+    return (end.x - start.x) * (point.z - start.z) -
+        (end.z - start.z) * (point.x - start.x);
+  }
+
+  double _distanceSquaredToSegment(
+    ARPoint point,
+    ARPoint start,
+    ARPoint end,
+  ) {
+    final dx = end.x - start.x;
+    final dz = end.z - start.z;
+    final lengthSquared = dx * dx + dz * dz;
+    if (lengthSquared <= 0.000001) {
+      final pointDx = point.x - start.x;
+      final pointDz = point.z - start.z;
+      return pointDx * pointDx + pointDz * pointDz;
+    }
+    final projection = (((point.x - start.x) * dx +
+                (point.z - start.z) * dz) /
+            lengthSquared)
+        .clamp(0.0, 1.0)
+        .toDouble();
+    final projectedX = start.x + dx * projection;
+    final projectedZ = start.z + dz * projection;
+    final distanceX = point.x - projectedX;
+    final distanceZ = point.z - projectedZ;
+    return distanceX * distanceX + distanceZ * distanceZ;
+  }
+
+  ARPoint _roomPointsCenter(List<ARPoint> points) {
+    final totalX = points.fold<double>(
+      0.0,
+      (sum, point) => sum + point.x,
+    );
+    final totalZ = points.fold<double>(
+      0.0,
+      (sum, point) => sum + point.z,
+    );
+    return ARPoint(
+      x: totalX / points.length,
+      y: 0.0,
+      z: totalZ / points.length,
+    );
   }
 
   ARPoint _roomCenter(RoomModel room) {
@@ -1474,7 +1645,6 @@ class FloorPlanProvider extends ChangeNotifier {
     if (feature == null) {
       return null;
     }
-
     return ScanContinuationReference.fromFeature(
       sourceRoomId: roomId,
       feature: feature,
@@ -2024,8 +2194,7 @@ class FloorPlanProvider extends ChangeNotifier {
             origin.x +
                 directionFromOriginX *
                     lengthMeters,
-        y: previous.y,
-        z:
+        y: previous.y,        z:
             origin.z +
                 directionFromOriginZ *
                     lengthMeters,
