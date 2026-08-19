@@ -86,6 +86,10 @@ class IsarWallFeature {
   @enumerated
   IsarDoorSwingSide doorSwingSide = IsarDoorSwingSide.left;
 
+  @enumerated
+  IsarDoorOpeningDirection doorOpeningDirection =
+      IsarDoorOpeningDirection.interior;
+
   double? openingHeightMeters;
   double? sillHeightMeters;
 }
@@ -93,6 +97,7 @@ class IsarWallFeature {
 enum IsarFeatureType { door, window }
 enum IsarDoorHingeSide { start, end }
 enum IsarDoorSwingSide { left, right }
+enum IsarDoorOpeningDirection { interior, exterior }
 
 // ==========================================
 // MAPEADORES DE CONVERSIÓN CON ROOMMODEL
@@ -119,6 +124,10 @@ extension WallFeatureIsarMapper on WallFeature {
       ..doorSwingSide = doorSwingSide == DoorSwingSide.left
           ? IsarDoorSwingSide.left
           : IsarDoorSwingSide.right
+      ..doorOpeningDirection =
+          doorOpeningDirection == DoorOpeningDirection.interior
+              ? IsarDoorOpeningDirection.interior
+              : IsarDoorOpeningDirection.exterior
       ..openingHeightMeters = openingHeightMeters
       ..sillHeightMeters = sillHeightMeters;
   }
@@ -137,6 +146,10 @@ extension IsarWallFeatureMapper on IsarWallFeature {
       doorSwingSide: doorSwingSide == IsarDoorSwingSide.left
           ? DoorSwingSide.left
           : DoorSwingSide.right,
+      doorOpeningDirection:
+          doorOpeningDirection == IsarDoorOpeningDirection.interior
+              ? DoorOpeningDirection.interior
+              : DoorOpeningDirection.exterior,
       openingHeightMeters: openingHeightMeters,
       sillHeightMeters: sillHeightMeters,
     );
