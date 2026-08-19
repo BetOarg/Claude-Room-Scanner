@@ -189,5 +189,6 @@
   "redoLastTransform": "Redo last adjustment",
   "alignNearestWall": "Align with the nearest wall",
   "wallAlignedSuccessfully": "The walls were aligned successfully.",
-  "noSafeNearbyWall": "No nearby parallel wall could be aligned safely."
+  "noSafeNearbyWall": "No nearby parallel wall could be aligned safely.",
+  "sharedWall": "Shared wall"
 }
