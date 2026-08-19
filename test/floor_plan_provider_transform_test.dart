@@ -109,6 +109,87 @@ void main() {
       expect(roomC.points.first.x, closeTo(10, 0.000001));
       expect(roomC.points.first.z, closeTo(10, 0.000001));
     });
+
+    test('deshace y rehace movimientos y giros en orden', () async {
+      final provider = FloorPlanProvider();
+      provider.loadProject(
+        uuid: 'project-history',
+        name: 'Casa conectada',
+        rooms: _connectedRooms(),
+      );
+      final originalFirstPoint = provider.completedRooms.first.points.first;
+
+      await provider.translateRoom(
+        roomId: 'room-a',
+        offsetX: 3,
+        offsetZ: -1,
+      );
+      final translatedFirstPoint =
+          provider.completedRooms.first.points.first;
+      await provider.rotateRoom(
+        roomId: 'room-a',
+        angleDegrees: 90,
+      );
+      final rotatedFirstPoint = provider.completedRooms.first.points.first;
+
+      expect(provider.canUndoTransform, isTrue);
+      expect(await provider.undoTransform(), isTrue);
+      expect(
+        provider.completedRooms.first.points.first.x,
+        closeTo(translatedFirstPoint.x, 0.000001),
+      );
+      expect(
+        provider.completedRooms.first.points.first.z,
+        closeTo(translatedFirstPoint.z, 0.000001),
+      );
+
+      expect(await provider.undoTransform(), isTrue);
+      expect(
+        provider.completedRooms.first.points.first.x,
+        closeTo(originalFirstPoint.x, 0.000001),
+      );
+      expect(
+        provider.completedRooms.first.points.first.z,
+        closeTo(originalFirstPoint.z, 0.000001),
+      );
+      expect(provider.canUndoTransform, isFalse);
+      expect(provider.canRedoTransform, isTrue);
+
+      expect(await provider.redoTransform(), isTrue);
+      expect(await provider.redoTransform(), isTrue);
+      expect(
+        provider.completedRooms.first.points.first.x,
+        closeTo(rotatedFirstPoint.x, 0.000001),
+      );
+      expect(
+        provider.completedRooms.first.points.first.z,
+        closeTo(rotatedFirstPoint.z, 0.000001),
+      );
+      _expectSameFeatureGeometry(
+        provider.completedRooms[0].features.single,
+        provider.completedRooms[1].features.single,
+      );
+    });
+
+    test('invalida el historial si el plano recibe otra edición', () async {
+      final provider = FloorPlanProvider();
+      provider.loadProject(
+        uuid: 'project-safe-history',
+        name: 'Casa conectada',
+        rooms: _connectedRooms(),
+      );
+
+      await provider.translateRoom(
+        roomId: 'room-a',
+        offsetX: 1,
+        offsetZ: 0,
+      );
+      await provider.updateRoomName('room-a', 'Living principal');
+
+      expect(provider.canUndoTransform, isFalse);
+      expect(await provider.undoTransform(), isFalse);
+      expect(provider.completedRooms.first.name, 'Living principal');
+    });
   });
 }
 
