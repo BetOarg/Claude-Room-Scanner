@@ -14,6 +14,14 @@ typedef ProjectPersister = Future<void> Function({
   required List<RoomModel> rooms,
 });
 
+enum WallAlignmentResult {
+  aligned,
+  noCandidate,
+  overlapPrevented;
+
+  bool get isSuccess => this == WallAlignmentResult.aligned;
+}
+
 class FloorPlanProvider extends ChangeNotifier {
   static const double _defaultRoomSpacing = 1.0;
   static const int _maximumTransformHistoryEntries = 50;
@@ -590,7 +598,6 @@ class FloorPlanProvider extends ChangeNotifier {
             point.z;
       }
     }
-
     if (!roomMinX.isFinite) {
       roomMinX = 0.0;
     }
@@ -825,22 +832,61 @@ class FloorPlanProvider extends ChangeNotifier {
     double maximumAngleDegrees = 5.0,
     double minimumOverlapMeters = 0.20,
   }) async {
+    final result = await alignRoomToNearestWallDetailed(
+      roomId: roomId,
+      maximumDistanceMeters: maximumDistanceMeters,
+      maximumAngleDegrees: maximumAngleDegrees,
+      minimumOverlapMeters: minimumOverlapMeters,
+    );
+    return result.isSuccess;
+  }
+
+  /// Corrige únicamente huecos pequeños entre paredes que deberían coincidir.
+  ///
+  /// La corrección es rígida, incluye el grupo conectado y utiliza la misma
+  /// validación de solapamientos que la alineación general.
+  Future<WallAlignmentResult> correctSmallWallGap({
+    required String roomId,
+    double maximumGapMeters = 0.10,
+    double maximumAngleDegrees = 2.0,
+    double minimumOverlapMeters = 0.20,
+  }) {
+    return alignRoomToNearestWallDetailed(
+      roomId: roomId,
+      maximumDistanceMeters: maximumGapMeters,
+      maximumAngleDegrees: maximumAngleDegrees,
+      minimumOverlapMeters: minimumOverlapMeters,
+    );
+  }
+
+  /// Alinea paredes cercanas y permite distinguir entre la ausencia de una
+  /// coincidencia geométrica y una corrección rechazada por solapamiento.
+  ///
+  /// Conserva la API booleana anterior mediante [alignRoomToNearestWall] para
+  /// no afectar pantallas ni integraciones existentes.
+  Future<WallAlignmentResult> alignRoomToNearestWallDetailed({
+    required String roomId,
+    double maximumDistanceMeters = 0.30,
+    double maximumAngleDegrees = 5.0,
+    double minimumOverlapMeters = 0.20,
+  }) async {
     final sourceRoomIndex = _completedRooms.indexWhere(
       (room) => room.id == roomId,
     );
     if (sourceRoomIndex == -1 ||
         maximumDistanceMeters <= 0 ||
         maximumAngleDegrees <= 0) {
-      return false;
+      return WallAlignmentResult.noCandidate;
     }
 
     final sourceRoom = _completedRooms[sourceRoomIndex];
     final connectedIds = _connectedRoomIds(roomId);
     if (sourceRoom.points.length < 2 || connectedIds.isEmpty) {
-      return false;
+      return WallAlignmentResult.noCandidate;
     }
 
     _WallAlignmentCandidate? bestCandidate;
+    var overlapPrevented = false;
     final maximumAngleRadians =
         maximumAngleDegrees * math.pi / 180.0;
 
@@ -977,6 +1023,7 @@ class FloorPlanProvider extends ChangeNotifier {
             candidate: candidate,
             connectedIds: connectedIds,
           )) {
+            overlapPrevented = true;
             continue;
           }
           if (bestCandidate == null ||
@@ -992,7 +1039,9 @@ class FloorPlanProvider extends ChangeNotifier {
         (candidate.rotationRadians.abs() <= 0.000001 &&
             candidate.offsetX.abs() <= 0.000001 &&
             candidate.offsetZ.abs() <= 0.000001)) {
-      return false;
+      return overlapPrevented
+          ? WallAlignmentResult.overlapPrevented
+          : WallAlignmentResult.noCandidate;
     }
 
     final before = List<RoomModel>.from(_completedRooms);
@@ -1019,7 +1068,7 @@ class FloorPlanProvider extends ChangeNotifier {
     _recordTransform(before);
     notifyListeners();
     await _persist();
-    return true;
+    return WallAlignmentResult.aligned;
   }
 
   bool _alignmentCreatesInteriorOverlap({
@@ -1147,8 +1196,7 @@ class FloorPlanProvider extends ChangeNotifier {
   }
 
   double _distanceSquaredToSegment(
-    ARPoint point,
-    ARPoint start,
+    ARPoint point,    ARPoint start,
     ARPoint end,
   ) {
     final dx = end.x - start.x;
@@ -1747,8 +1795,7 @@ class FloorPlanProvider extends ChangeNotifier {
       );
     }
 
-    return total;
-  }
+    return total;  }
 
   List<Map<String, dynamic>>
       get roomSummaries {
@@ -2347,8 +2394,7 @@ class OpeningPlacement {
 
   const OpeningPlacement({
     required this.widthMeters,
-    required this.distanceFromWallStartMeters,
-    required this.wallLengthMeters,
+    required this.distanceFromWallStartMeters,    required this.wallLengthMeters,
     required this.openingHeightMeters,
     required this.sillHeightMeters,
   });
