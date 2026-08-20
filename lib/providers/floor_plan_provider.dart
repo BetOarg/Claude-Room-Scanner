@@ -22,6 +22,13 @@ enum WallAlignmentResult {
   bool get isSuccess => this == WallAlignmentResult.aligned;
 }
 
+enum AutomaticRoomMoveResult {
+  moved,
+  movedAndAdjusted;
+
+  bool get wasAdjusted => this == AutomaticRoomMoveResult.movedAndAdjusted;
+}
+
 class FloorPlanProvider extends ChangeNotifier {
   static const double _defaultRoomSpacing = 1.0;
   static const int _maximumTransformHistoryEntries = 50;
@@ -590,8 +597,7 @@ class FloorPlanProvider extends ChangeNotifier {
         in room.points) {
       if (point.x < roomMinX) {
         roomMinX =
-            point.x;
-      }
+            point.x;      }
 
       if (point.z < roomMinZ) {
         roomMinZ =
@@ -758,6 +764,39 @@ class FloorPlanProvider extends ChangeNotifier {
     notifyListeners();
 
     await _persist();
+  }
+
+  /// Mueve el ambiente y ajusta automáticamente un hueco pequeño cercano.
+  /// Si el ajuste no es seguro, conserva solamente el movimiento solicitado.
+  Future<AutomaticRoomMoveResult> translateRoomAutomatically({
+    required String roomId,
+    required double offsetX,
+    required double offsetZ,
+  }) async {
+    final historyLengthBefore = _transformUndoHistory.length;
+    await translateRoom(
+      roomId: roomId,
+      offsetX: offsetX,
+      offsetZ: offsetZ,
+    );
+
+    final correction = await correctSmallWallGap(roomId: roomId);
+    if (!correction.isSuccess) {
+      return AutomaticRoomMoveResult.moved;
+    }
+
+    if (_transformUndoHistory.length >= historyLengthBefore + 2) {
+      final correctionEntry = _transformUndoHistory.removeLast();
+      final movementEntry = _transformUndoHistory.removeLast();
+      _transformUndoHistory.add(
+        _TransformHistoryEntry(
+          before: movementEntry.before,
+          after: correctionEntry.after,
+        ),
+      );
+    }
+
+    return AutomaticRoomMoveResult.movedAndAdjusted;
   }
 
   /// Rota rígidamente un ambiente y todo su grupo conectado.
@@ -1157,8 +1196,7 @@ class FloorPlanProvider extends ChangeNotifier {
         _crossProduct(secondStart, secondEnd, firstStart);
     final secondSideEnd =
         _crossProduct(secondStart, secondEnd, firstEnd);
-    const tolerance = 0.000001;
-    return firstSideStart * firstSideEnd < -tolerance &&
+    const tolerance = 0.000001;    return firstSideStart * firstSideEnd < -tolerance &&
         secondSideStart * secondSideEnd < -tolerance;
   }
 
@@ -1757,8 +1795,7 @@ class FloorPlanProvider extends ChangeNotifier {
     RoomModel room,
     int wallIndex,
   ) {
-    final points =
-        room.points;
+    final points =        room.points;
 
     if (points.length < 2 ||
         wallIndex < 0 ||
@@ -2357,8 +2394,7 @@ class _WallAlignmentCandidate {
     required this.rotationRadians,
     required this.offsetX,
     required this.offsetZ,
-    required this.score,
-  });
+    required this.score,  });
 }
 
 class _FeatureRemapResult {
