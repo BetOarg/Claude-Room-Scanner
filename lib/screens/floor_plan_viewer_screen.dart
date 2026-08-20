@@ -497,8 +497,7 @@ class _FloorPlanViewerScreenState
       text: widthImperial.feet.toString(),
     );
     final widthInchesController = TextEditingController(
-      text: _formatDecimal(widthImperial.inches),
-    );
+      text: _formatDecimal(widthImperial.inches),    );
     final positionFeetController = TextEditingController(
       text: positionImperial.feet.toString(),
     );
@@ -597,7 +596,8 @@ class _FloorPlanViewerScreenState
             }
 
             return AlertDialog(
-              title: Text(localizations.editOpeningDimensions),              content: SingleChildScrollView(
+              title: Text(localizations.editOpeningDimensions),
+              content: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,                  children: [                    Text(                      '${localizations.wallLength}: '                      '${_formatLength(placement.wallLengthMeters, measurementSystem)}',
@@ -996,8 +996,7 @@ class _FloorPlanViewerScreenState
     return formatted;
   }
 
-  // ===========================================================================
-  // EDITOR DE MEDIDAS
+  // ===========================================================================  // EDITOR DE MEDIDAS
   // ===========================================================================
 
   Future<void>
@@ -1196,7 +1195,8 @@ class _FloorPlanViewerScreenState
             Widget movementButton({
               required IconData icon,
               required String tooltip,
-              required VoidCallback onPressed,            }) {
+              required VoidCallback onPressed,
+            }) {
               return Tooltip(
                 message: tooltip,
                 child: SizedBox(
@@ -1495,8 +1495,7 @@ class _FloorPlanViewerScreenState
           IconButton(
             icon: const Icon(
               Icons.straighten_outlined,
-            ),
-            tooltip:
+            ),            tooltip:
                 'Editar medidas',
             onPressed: () =>
                 _openMeasurementEditor(),
@@ -1755,7 +1754,48 @@ class _FloorPlanViewerScreenState
     );
   }
 
-  // ===============        context.read<
+  // ===========================================================================
+  // IMPORTAR / EXPORTAR
+  // ===========================================================================
+
+  Future<void> _importJson() async {
+    final provider =
+        context.read<
+            FloorPlanProvider>();
+
+    final success =
+        await ImportExportService
+            .importFromJson(
+      provider,
+    );
+
+    if (!mounted) {
+      return;
+    }
+
+    _showMessage(
+      success
+          ? 'Plano importado correctamente.'
+          : 'Importación cancelada o no válida.',
+      error: !success,
+    );
+  }
+
+  Future<void> _shareJson() async {
+    final provider =
+        context.read<
+            FloorPlanProvider>();
+
+    await ImportExportService
+        .exportToJson(
+      provider.completedRooms,
+      provider.projectName,
+    );
+  }
+
+  Future<void> _exportPdf() async {
+    final provider =
+        context.read<
             FloorPlanProvider>();
 
     await ImportExportService
@@ -1954,8 +1994,7 @@ class _FloorPlanViewerScreenState
                               rooms.length,
                           separatorBuilder:
                               (
-                            context,
-                            index,
+                            context,                            index,
                           ) =>
                                   const Divider(
                             height: 1,
@@ -2354,7 +2393,8 @@ class _OpeningDirectionPainter extends CustomPainter {
       ..strokeWidth = 7
       ..strokeCap = StrokeCap.round;
     final arrowPaint = Paint()
-      ..color = const Color(0xFF00C853)      ..strokeWidth = 4
+      ..color = const Color(0xFF00C853)
+      ..strokeWidth = 4
       ..strokeCap = StrokeCap.round;
 
     canvas.drawLine(start, end, openingPaint);
@@ -2453,8 +2493,7 @@ class _EmptyPlanView extends StatelessWidget {
               'Completá un escaneo para visualizar '              'el plano general.',
               textAlign:
                   TextAlign.center,              style: TextStyle(
-                color: Colors.black54,
-              ),
+                color: Colors.black54,              ),
             ),
           ],
         ),
@@ -3452,8 +3491,7 @@ class FloorPlanPainter
     const extensionEndOffset = 34.0;
     const endMarkHalfLength = 3.0;
     const color = Color(0xFF455A64);
-    final dimensionStart =
-        start + inwardNormal * dimensionOffset;
+    final dimensionStart =        start + inwardNormal * dimensionOffset;
     final dimensionEnd =
         end + inwardNormal * dimensionOffset;
     final dimensionPaint = Paint()
@@ -3552,7 +3590,8 @@ class FloorPlanPainter
   }
 
   int _nearestWallIndex(
-    Offset point,    List<Offset> wallPoints,
+    Offset point,
+    List<Offset> wallPoints,
   ) {
     var nearestIndex = -1;
     var nearestDistance = double.infinity;
