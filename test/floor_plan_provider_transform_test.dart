@@ -335,6 +335,33 @@ void main() {
         expect(provider.canUndoTransform, isFalse);
       },
     );
+
+    test('mueve y ajusta automáticamente como una sola operación', () async {
+      final provider = FloorPlanProvider();
+      provider.loadProject(
+        uuid: 'project-automatic-adjustment',
+        name: 'Casa con ajuste automático',
+        rooms: _connectedRooms()
+          ..add(_independentRoom(offsetX: 4.15)),
+      );
+
+      final result = await provider.translateRoomAutomatically(
+        roomId: 'room-b',
+        offsetX: 0.10,
+        offsetZ: 0,
+      );
+
+      expect(result, AutomaticRoomMoveResult.movedAndAdjusted);
+      expect(
+        provider.completedRooms[1].points[1].x,
+        closeTo(4.15, 0.000001),
+      );
+      expect(await provider.undoTransform(), isTrue);
+      expect(
+        provider.completedRooms[1].points[1].x,
+        closeTo(4, 0.000001),
+      );
+    });
   });
 }
 
