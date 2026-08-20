@@ -19,6 +19,7 @@ import '../scanner/services/scanner_permission_service.dart';
 import '../utils/measurement_units.dart';
 import '../utils/scan_validator.dart';
 import '../widgets/room_name_dialog.dart';
+import '../widgets/room_completion_dialog.dart';
 import 'floor_plan_viewer_screen.dart';
 
 enum BasicAppMode {
@@ -496,8 +497,7 @@ class _BasicScannerScreenState
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
-        children: [
-          _buildCameraPreview(),          _buildScannerOverlay(            provider,
+        children: [          _buildCameraPreview(),          _buildScannerOverlay(            provider,
             completedRooms,
           ),
           _buildTopHud(provider),
@@ -658,8 +658,7 @@ class _BasicScannerScreenState
                     provider,
                     l10n,
                   ),
-                  subtitle:
-                      '$count esquinas',
+                  subtitle: _scanRecommendation(count, l10n),
                   onTap: () =>
                       _showCustomRoomNameDialog(
                     provider,
@@ -790,6 +789,15 @@ class _BasicScannerScreenState
     return room.name == defaultName
         ? room.type.localizedName(l10n)
         : room.name;
+  }
+
+  String _scanRecommendation(
+    int cornerCount,
+    AppLocalizations l10n,
+  ) {
+    if (cornerCount == 0) return l10n.markStartRecommendation;
+    if (cornerCount < 3) return l10n.addNextCornerRecommendation;
+    return l10n.closeSpaceRecommendation;
   }
 
   Widget _hudCard({
@@ -988,8 +996,7 @@ class _BasicScannerScreenState
                           );
                         },
                       );
-                    },                  ),
-                ),
+                    },                  ),                ),
               ],
             ),
           ),
@@ -1488,8 +1495,7 @@ class _BasicScannerScreenState
     }
 
     if (_currentMode !=
-        BasicAppMode.wall) {
-      await _captureFeature(
+        BasicAppMode.wall) {      await _captureFeature(
         provider,
       );
       return;
@@ -1988,8 +1994,7 @@ class _BasicScannerScreenState
                     const SizedBox(
                       height: 16,
                     ),
-                    Text(
-                      l10n.measurementSystem,
+                    Text(                      l10n.measurementSystem,
                       style: const TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 12,
@@ -2489,7 +2494,6 @@ class _BasicScannerScreenState
       metricController.clear();
       return;
     }
-
     metricController.text =
         _formatUnitNumber(meters);
   }
@@ -2697,6 +2701,17 @@ class _BasicScannerScreenState
 
     HapticFeedback.mediumImpact();
 
+    final l10n = AppLocalizations.of(context)!;
+    final roomName = await showRoomNameDialog(
+      context: context,
+      initialName: provider.currentRoom?.name ??
+          provider.selectedType.localizedName(l10n),
+    );
+    if (!mounted || roomName == null || roomName.trim().isEmpty) {
+      return;
+    }
+    provider.setCurrentRoomName(roomName);
+
     final continuation =
         widget.continuationReference;
 
@@ -2752,13 +2767,19 @@ class _BasicScannerScreenState
       return;
     }
 
-    _showMessage(
-      continuation == null
-          ? 'Ambiente guardado correctamente.'
-          : 'Ambiente conectado y alineado correctamente.',
-    );
+    final action = await showRoomCompletionDialog(context);
+    if (!mounted || action == null) return;
 
-    Navigator.pop(context);
+    if (action == RoomCompletionAction.viewFullPlan) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => const FloorPlanViewerScreen(),
+        ),
+      );
+    } else {
+      Navigator.pop(context);
+    }
   }
 
   void _openFloorPlan() {
@@ -2971,8 +2992,7 @@ class _ScannerGuidePainter
             y: 0.0,
             z: 0.0,
           ),
-        ),
-      );
+        ),      );
     }
 
     _drawCenterGuide(
