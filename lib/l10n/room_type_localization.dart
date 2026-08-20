@@ -34,6 +34,8 @@ extension LocalizedRoomType on RoomType {
         return l10n.roomTypeGarage;
       case RoomType.playroom:
         return l10n.roomTypePlayroom;
+      case RoomType.other:
+        return l10n.roomTypeOther;
     }
   }
 }
