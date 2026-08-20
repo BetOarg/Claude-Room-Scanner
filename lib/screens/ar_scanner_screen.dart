@@ -19,6 +19,7 @@ import '../services/permission_service.dart';
 import '../utils/measurement_units.dart';
 import '../utils/scan_validator.dart';
 import '../widgets/room_name_dialog.dart';
+import '../widgets/room_completion_dialog.dart';
 import '../scanner/adapters/ar_scanner_adapter.dart';
 import 'floor_plan_viewer_screen.dart';
 
@@ -409,7 +410,10 @@ class _ARScannerScreenState extends State<ARScannerScreen>
                   ),
                 ),
                 child: Text(
-                  'Esquinas: ${provider.currentPointsCount}',
+                  _scanRecommendation(
+                    provider.currentPointsCount,
+                    l10n,
+                  ),
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 13,
@@ -493,8 +497,7 @@ class _ARScannerScreenState extends State<ARScannerScreen>
                       value: MeasurementSystem.imperial,
                       child: ListTile(
                         dense: true,
-                        leading: const Icon(
-                          Icons.square_foot,
+                        leading: const Icon(                          Icons.square_foot,
                         ),
                         title: Text(
                           l10n.imperialSystem,                        ),
@@ -689,6 +692,15 @@ class _ARScannerScreenState extends State<ARScannerScreen>
     return room.name == defaultName
         ? room.type.localizedName(l10n)
         : room.name;
+  }
+
+  String _scanRecommendation(
+    int cornerCount,
+    AppLocalizations l10n,
+  ) {
+    if (cornerCount == 0) return l10n.markStartRecommendation;
+    if (cornerCount < 3) return l10n.addNextCornerRecommendation;
+    return l10n.closeSpaceRecommendation;
   }
   Future<void> _showCustomRoomNameDialog(
     ScannerProvider provider,
@@ -984,8 +996,7 @@ class _ARScannerScreenState extends State<ARScannerScreen>
 
       case AppMode.door:
       case AppMode.window:
-        _handleFeatureInsertion(
-          provider,
+        _handleFeatureInsertion(          provider,
           _currentMode,
           resolvedPosition,
         );
@@ -1155,6 +1166,17 @@ class _ARScannerScreenState extends State<ARScannerScreen>
   ) async {
     HapticFeedback.mediumImpact();
 
+    final l10n = AppLocalizations.of(context)!;
+    final roomName = await showRoomNameDialog(
+      context: context,
+      initialName: provider.currentRoom?.name ??
+          provider.selectedType.localizedName(l10n),
+    );
+    if (!mounted || roomName == null || roomName.trim().isEmpty) {
+      return;
+    }
+    provider.setCurrentRoomName(roomName);
+
     final continuation = widget.continuationReference;
     final floorPlanProvider = context.read<FloorPlanProvider>();
 
@@ -1227,18 +1249,19 @@ class _ARScannerScreenState extends State<ARScannerScreen>
 
     if (!mounted) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          continuation == null
-              ? '¡Ambiente guardado correctamente!'
-              : '¡Ambiente conectado y alineado correctamente!',
-        ),
-        backgroundColor: Colors.green,
-      ),
-    );
+    final action = await showRoomCompletionDialog(context);
+    if (!mounted || action == null) return;
 
-    Navigator.pop(context);
+    if (action == RoomCompletionAction.viewFullPlan) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => const FloorPlanViewerScreen(),
+        ),
+      );
+    } else {
+      Navigator.pop(context);
+    }
   }
 
   // ================================================================
