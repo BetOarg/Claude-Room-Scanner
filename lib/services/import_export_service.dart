@@ -497,8 +497,7 @@ class ImportExportService {
     svg
       ..writeln(
         '<line x1="${_svgNumber(start.x)}" y1="${_svgNumber(start.y)}" '
-        'x2="${_svgNumber(end.x)}" y2="${_svgNumber(end.y)}" '
-        'stroke="white" stroke-width="8"/>',
+        'x2="${_svgNumber(end.x)}" y2="${_svgNumber(end.y)}" '        'stroke="white" stroke-width="8"/>',
       )
       ..writeln(
         '<line x1="${_svgNumber(start.x + normalX)}" '
@@ -848,6 +847,8 @@ class _PdfLabels {
         return 'Garage';
       case RoomType.playroom:
         return 'Playroom';
+      case RoomType.other:
+        return 'Other space';
     }
   }
 }
