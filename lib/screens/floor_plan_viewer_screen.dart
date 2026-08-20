@@ -597,8 +597,7 @@ class _FloorPlanViewerScreenState
             }
 
             return AlertDialog(
-              title: Text(localizations.editOpeningDimensions),
-              content: SingleChildScrollView(
+              title: Text(localizations.editOpeningDimensions),              content: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,                  children: [                    Text(                      '${localizations.wallLength}: '                      '${_formatLength(placement.wallLengthMeters, measurementSystem)}',
@@ -1139,13 +1138,16 @@ class _FloorPlanViewerScreenState
               required double offsetX,
               required double offsetZ,
             }) async {
-              await provider.translateRoom(
+              final result = await provider.translateRoomAutomatically(
                 roomId: selectedRoomId,
                 offsetX: offsetX,
                 offsetZ: offsetZ,
               );
               if (context.mounted) {
                 setModalState(() {});
+              }
+              if (result.wasAdjusted && mounted) {
+                _showMessage(localizations.roomAdjustedAutomatically);
               }
             }
 
@@ -1194,8 +1196,7 @@ class _FloorPlanViewerScreenState
             Widget movementButton({
               required IconData icon,
               required String tooltip,
-              required VoidCallback onPressed,
-            }) {
+              required VoidCallback onPressed,            }) {
               return Tooltip(
                 message: tooltip,
                 child: SizedBox(
@@ -1754,48 +1755,7 @@ class _FloorPlanViewerScreenState
     );
   }
 
-  // ===========================================================================
-  // IMPORTAR / EXPORTAR
-  // ===========================================================================
-
-  Future<void> _importJson() async {
-    final provider =
-        context.read<
-            FloorPlanProvider>();
-
-    final success =
-        await ImportExportService
-            .importFromJson(
-      provider,
-    );
-
-    if (!mounted) {
-      return;
-    }
-
-    _showMessage(
-      success
-          ? 'Plano importado correctamente.'
-          : 'Importación cancelada o no válida.',
-      error: !success,
-    );
-  }
-
-  Future<void> _shareJson() async {
-    final provider =
-        context.read<
-            FloorPlanProvider>();
-
-    await ImportExportService
-        .exportToJson(
-      provider.completedRooms,
-      provider.projectName,
-    );
-  }
-
-  Future<void> _exportPdf() async {
-    final provider =
-        context.read<
+  // ===============        context.read<
             FloorPlanProvider>();
 
     await ImportExportService
@@ -2394,8 +2354,7 @@ class _OpeningDirectionPainter extends CustomPainter {
       ..strokeWidth = 7
       ..strokeCap = StrokeCap.round;
     final arrowPaint = Paint()
-      ..color = const Color(0xFF00C853)
-      ..strokeWidth = 4
+      ..color = const Color(0xFF00C853)      ..strokeWidth = 4
       ..strokeCap = StrokeCap.round;
 
     canvas.drawLine(start, end, openingPaint);
@@ -2994,8 +2953,7 @@ class FloorPlanPainter
               fontSize: 10,
               fontWeight:
                   FontWeight.w500,
-            ),
-          ),
+            ),          ),
         ],
       ),
       textAlign:
@@ -3594,8 +3552,7 @@ class FloorPlanPainter
   }
 
   int _nearestWallIndex(
-    Offset point,
-    List<Offset> wallPoints,
+    Offset point,    List<Offset> wallPoints,
   ) {
     var nearestIndex = -1;
     var nearestDistance = double.infinity;
