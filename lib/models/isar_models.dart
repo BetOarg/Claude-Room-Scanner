@@ -57,6 +57,7 @@ enum IsarRoomType {
   terraza,
   cochera,
   playroom,
+  other,
 }
 
 /// Objeto Embebido: Punto AR 3D
