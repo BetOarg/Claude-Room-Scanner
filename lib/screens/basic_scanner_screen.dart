@@ -18,6 +18,7 @@ import '../scanner/models/scanner_point.dart';
 import '../scanner/services/scanner_permission_service.dart';
 import '../utils/measurement_units.dart';
 import '../utils/scan_validator.dart';
+import '../widgets/room_name_dialog.dart';
 import 'floor_plan_viewer_screen.dart';
 
 enum BasicAppMode {
@@ -496,8 +497,7 @@ class _BasicScannerScreenState
       backgroundColor: Colors.black,
       body: Stack(
         children: [
-          _buildCameraPreview(),
-          _buildScannerOverlay(            provider,
+          _buildCameraPreview(),          _buildScannerOverlay(            provider,
             completedRooms,
           ),
           _buildTopHud(provider),
@@ -666,22 +666,7 @@ class _BasicScannerScreenState
                   ),
                 ),
               ),
-              const SizedBox(
-                width: 8,
-              ),
-              _hudIconButton(
-                icon:
-                    Icons.home_work_outlined,
-                tooltip:
-                    l10n.roomType,
-                onPressed: () =>
-                    _showRoomTypeSelector(
-                  provider,
-                ),
-              ),
-              const SizedBox(
-                width: 8,
-              ),
+              const SizedBox(width: 8),
               _hudIconButton(
                 icon:
                     Icons.map_outlined,
@@ -908,90 +893,14 @@ class _BasicScannerScreenState
   Future<void> _showCustomRoomNameDialog(
     ScannerProvider provider,
   ) async {
-    final l10n =
-        AppLocalizations.of(context)!;
-
-    final controller =
-        TextEditingController(
-      text: provider.currentRoom?.name ??
+    final l10n = AppLocalizations.of(context)!;
+    final name = await showRoomNameDialog(
+      context: context,
+      initialName: provider.currentRoom?.name ??
           provider.selectedType.localizedName(l10n),
     );
 
-    final name =
-        await showDialog<String>(
-      context: context,
-      builder: (
-        dialogContext,
-      ) {
-        return AlertDialog(
-          title: Text(
-            l10n.roomName,
-          ),
-          content: TextField(
-            controller: controller,
-            autofocus: true,
-            textCapitalization:
-                TextCapitalization.sentences,
-            maxLength: 60,
-            decoration:
-                InputDecoration(
-              labelText:
-                  l10n.roomDestination,
-              hintText:
-                  l10n.roomNameExample,
-              border:
-                  OutlineInputBorder(),
-            ),
-            onSubmitted: (value) {
-              final normalized =
-                  value.trim();
-
-              if (normalized.isNotEmpty) {
-                Navigator.pop(
-                  dialogContext,
-                  normalized,
-                );
-              }
-            },
-          ),
-          actions: [
-            TextButton(
-              onPressed: () =>
-                  Navigator.pop(
-                dialogContext,
-              ),
-              child: Text(
-                l10n.cancel,
-              ),
-            ),
-            FilledButton(
-              onPressed: () {
-                final normalized =
-                    controller.text.trim();
-
-                if (normalized.isEmpty) {
-                  return;
-                }
-
-                Navigator.pop(
-                  dialogContext,
-                  normalized,
-                );
-              },
-              child: Text(
-                l10n.save,
-              ),
-            ),
-          ],
-        );
-      },
-    );
-
-    await Future<void>.delayed(
-      kThemeAnimationDuration,
-    );
-
-    controller.dispose();    if (!mounted ||
+    if (!mounted ||
         name == null ||
         name.trim().isEmpty) {
       return;
@@ -1087,8 +996,7 @@ class _BasicScannerScreenState
         );
       },
     );
-    if (selected == null ||
-        !mounted) {
+    if (selected == null ||        !mounted) {
       return;
     }
 
@@ -1587,8 +1495,7 @@ class _BasicScannerScreenState
       return;
     }
 
-    await _captureWallPoint(
-      provider,
+    await _captureWallPoint(      provider,
     );  }
 
   Future<void> _captureWallPoint(
@@ -2087,8 +1994,7 @@ class _BasicScannerScreenState
                         fontWeight: FontWeight.bold,
                         fontSize: 12,
                       ),
-                    ),
-                    const SizedBox(height: 8),
+                    ),                    const SizedBox(height: 8),
                     SegmentedButton<MeasurementSystem>(
                       segments: [
                         ButtonSegment<MeasurementSystem>(
@@ -2587,7 +2493,6 @@ class _BasicScannerScreenState
     metricController.text =
         _formatUnitNumber(meters);
   }
-
   String _formatUnitNumber(
     double value,
   ) {
@@ -3087,8 +2992,7 @@ class _ScannerGuidePainter
 
     final wallPaint = Paint()
       ..color = const Color(0xFF448AFF).withValues(
-        alpha: 0.55,
-      )
+        alpha: 0.55,      )
       ..style = PaintingStyle.stroke
       ..strokeWidth = 3
       ..strokeJoin = StrokeJoin.round;
