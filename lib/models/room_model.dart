@@ -19,6 +19,7 @@ enum RoomType {
   terraza,
   cochera,
   playroom,
+  other,
 }
 
 extension RoomTypeDisplay on RoomType {
@@ -52,6 +53,8 @@ extension RoomTypeDisplay on RoomType {
         return 'Cochera';
       case RoomType.playroom:
         return 'Playroom';
+      case RoomType.other:
+        return 'Otro espacio';
     }
   }
 }
