@@ -190,5 +190,6 @@
   "alignNearestWall": "Alinear con la pared más cercana",
   "wallAlignedSuccessfully": "Las paredes se alinearon correctamente.",
   "noSafeNearbyWall": "No se encontró una pared cercana y paralela que pueda alinearse de forma segura.",
-  "sharedWall": "Pared compartida"
+  "sharedWall": "Pared compartida",
+  "roomAdjustedAutomatically": "La habitación se ajustó correctamente."
 }
