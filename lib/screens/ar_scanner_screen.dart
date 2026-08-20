@@ -18,6 +18,7 @@ import '../providers/scanner_provider.dart';
 import '../services/permission_service.dart';
 import '../utils/measurement_units.dart';
 import '../utils/scan_validator.dart';
+import '../widgets/room_name_dialog.dart';
 import '../scanner/adapters/ar_scanner_adapter.dart';
 import 'floor_plan_viewer_screen.dart';
 
@@ -496,8 +497,7 @@ class _ARScannerScreenState extends State<ARScannerScreen>
                           Icons.square_foot,
                         ),
                         title: Text(
-                          l10n.imperialSystem,
-                        ),
+                          l10n.imperialSystem,                        ),
                       ),
                     ),
                   ],
@@ -552,51 +552,6 @@ class _ARScannerScreenState extends State<ARScannerScreen>
                 ),
 
                 const SizedBox(height: 12),
-
-                // ------------------------------------------------------
-                // SELECTOR DE TIPO DE HABITACIÓN
-                // ------------------------------------------------------
-
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: RoomType.values.map((type) {
-                      final isSelected =
-                          provider.selectedType == type;
-
-                      return Padding(
-                        padding: const EdgeInsets.only(
-                          right: 8.0,
-                        ),
-                        child: ChoiceChip(
-                          label: Text(
-                            type.localizedName(l10n).toUpperCase(),
-                          ),
-                          selected: isSelected,
-                          selectedColor:
-                              Colors.blueAccent,
-                          backgroundColor:
-                              Colors.black87,
-                          labelStyle: TextStyle(
-                            color: isSelected
-                                ? Colors.white
-                                : Colors.white70,
-                            fontWeight: isSelected
-                                ? FontWeight.bold
-                                : FontWeight.normal,
-                          ),
-                          onSelected: (_) {
-                            HapticFeedback.selectionClick();
-
-                            provider.setRoomType(type);
-                          },
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                ),
-
-                const SizedBox(height: 16),
 
                 // ------------------------------------------------------
                 // BOTONES PRINCIPALES DE ESCANEO
@@ -738,88 +693,12 @@ class _ARScannerScreenState extends State<ARScannerScreen>
   Future<void> _showCustomRoomNameDialog(
     ScannerProvider provider,
   ) async {
-    final l10n =
-        AppLocalizations.of(context)!;
-
-    final controller =
-        TextEditingController(
-      text: provider.currentRoom?.name ??
+    final l10n = AppLocalizations.of(context)!;
+    final name = await showRoomNameDialog(
+      context: context,
+      initialName: provider.currentRoom?.name ??
           provider.selectedType.localizedName(l10n),
     );
-
-    final name =
-        await showDialog<String>(
-      context: context,
-      builder: (
-        dialogContext,
-      ) {
-        return AlertDialog(
-          title: Text(
-            l10n.roomName,
-          ),
-          content: TextField(
-            controller: controller,
-            autofocus: true,
-            textCapitalization:
-                TextCapitalization.sentences,
-            maxLength: 60,
-            decoration:
-                InputDecoration(
-              labelText:
-                  l10n.roomDestination,
-              hintText:
-                  l10n.roomNameExample,
-              border:
-                  OutlineInputBorder(),
-            ),
-            onSubmitted: (value) {
-              final normalized =
-                  value.trim();
-
-              if (normalized.isNotEmpty) {
-                Navigator.pop(
-                  dialogContext,
-                  normalized,
-                );
-              }
-            },
-          ),
-          actions: [
-            TextButton(
-              onPressed: () =>
-                  Navigator.pop(
-                dialogContext,
-              ),
-              child: Text(
-                l10n.cancel,
-              ),
-            ),
-            FilledButton(
-              onPressed: () {
-                final normalized =
-                    controller.text.trim();
-
-                if (normalized.isEmpty) {
-                  return;
-                }
-
-                Navigator.pop(
-                  dialogContext,
-                  normalized,
-                );
-              },
-              child: Text(
-                l10n.save,
-              ),
-            ),
-          ],
-        );
-      },
-    );    await Future<void>.delayed(
-      kThemeAnimationDuration,
-    );
-
-    controller.dispose();
 
     if (!mounted ||
         name == null ||
@@ -1117,8 +996,7 @@ class _ARScannerScreenState extends State<ARScannerScreen>
   void _handleWallPoint(
     ScannerProvider provider,
     vector.Vector3 pos,
-  ) {
-    final ValidationResult result =
+  ) {    final ValidationResult result =
         provider.tryAddPoint(
       pos.x,
       pos.y,
