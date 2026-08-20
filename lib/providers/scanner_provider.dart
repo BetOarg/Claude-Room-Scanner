@@ -105,6 +105,7 @@ class ScannerProvider extends ChangeNotifier {
     _currentRoom =
         _currentRoom!.copyWith(
       name: normalized,
+      type: RoomType.other,
     );
 
     notifyListeners();
@@ -496,8 +497,7 @@ class ScannerProvider extends ChangeNotifier {
 
       bool belongsToWall(
         ARPoint point,
-      ) {
-        final rawT =
+      ) {        final rawT =
             rawProjection(point);
 
         if (rawT < -0.01 ||
