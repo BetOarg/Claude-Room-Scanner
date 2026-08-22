@@ -23,23 +23,27 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Dart
-        uses: dart-lang/setup-dart@v1
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: "stable"
+          cache: true
 
       - name: Get dependencies
-        run: dart pub get
+        run: flutter pub get
         working-directory: packages/room_scanner_core
 
       - name: Generate Isar / Build Runner code
-        run: dart run build_runner build --delete-conflicting-outputs
+        run: flutter pub run build_runner build --delete-conflicting-outputs
         working-directory: packages/room_scanner_core
 
       - name: Analyze code
-        run: dart analyze --fatal-infos
+        run: flutter analyze --fatal-infos
         working-directory: packages/room_scanner_core
 
       - name: Run tests
-        run: dart test
+        run: flutter test
         working-directory: packages/room_scanner_core
 
   check-android:
@@ -52,12 +56,11 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up JDK
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v4
         with:
           java-version: ${{ env.JAVA_VERSION }}
           distribution: "temurin"
 
-      # Cache de Gradle para evitar errores de red en descargas
       - name: Cache Gradle Wrapper
         uses: actions/cache@v4
         with:
@@ -104,8 +107,8 @@ jobs:
 
       - name: Generate Isar / Build Runner code (room_scanner_core)
         run: |
-          dart pub get
-          dart run build_runner build --delete-conflicting-outputs
+          flutter pub get
+          flutter pub run build_runner build --delete-conflicting-outputs
         working-directory: packages/room_scanner_core
 
       - name: Get dependencies (room_scanner_app)
@@ -150,8 +153,8 @@ jobs:
 
       - name: Generate Isar / Build Runner code (room_scanner_core)
         run: |
-          dart pub get
-          dart run build_runner build --delete-conflicting-outputs
+          flutter pub get
+          flutter pub run build_runner build --delete-conflicting-outputs
         working-directory: packages/room_scanner_core
 
       - name: Get dependencies (room_scanner_app)
