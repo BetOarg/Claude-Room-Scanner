@@ -24,7 +24,7 @@ Claude Room Scanner selecciona automáticamente la mejor experiencia disponible 
 - Interfaz localizada en español e inglés.
 - Sistema métrico e imperial con preferencia persistente.
 
-La versión declarada actualmente en `pubspec.yaml` es **2.6.1+3**.
+La versión declarada actualmente en `packages/room_scanner_app/pubspec.yaml` es **2.6.1+3**. `packages/room_scanner_core/pubspec.yaml` versiona el núcleo de dominio por separado, a partir de **1.0.0**.
 
 ## Selección automática del escáner
 
@@ -176,35 +176,62 @@ La preferencia global se conserva mediante `SharedPreferences` y se aplica al es
 
 ## Arquitectura
 
+El repositorio es un **monorepo con dos paquetes** orquestados con [Melos](https://melos.invertase.dev/), pensado como fase previa a separarlos en dos repositorios independientes:
+
+- **`packages/room_scanner_core`** — paquete Dart puro (sin Flutter, sin widgets, sin hardware): modelos de dominio, colecciones Isar, `GeometryService`, `SharedWallService`, `LocalDatabaseService` y `PlanExportBuilder` (construcción de JSON/PDF).
+- **`packages/room_scanner_app`** — aplicación Flutter: pantallas, providers, i18n, la capa de hardware/AR (`scanner/`), plataformas `android/`/`ios/` y el `main.dart`. Depende de `room_scanner_core`.
+
 ```text
-lib/
-├── config/                  # Configuración por entorno
-├── l10n/                    # Recursos de localización
-├── models/                  # Dominio, geometría e Isar
-├── providers/               # Estado y persistencia coordinada
-├── scanner/
-│   ├── adapters/            # Adaptadores AR y cámara básica
-│   ├── engine/              # Resolución y ejecución del modo de escaneo
-│   ├── models/              # Estado y puntos del scanner
-│   └── services/            # Capacidades, permisos y sensores
-├── screens/                 # Pantallas de la aplicación
-├── services/                # Geometría, exportación, base local y nube
-├── utils/                   # Unidades, estabilidad y validación
-└── main.dart                # Inicialización y composición principal
+claude-room-scanner/
+├── melos.yaml
+├── .github/workflows/           # ci.yml, build_apk.yml
+└── packages/
+    ├── room_scanner_core/
+    │   ├── pubspec.yaml          # paquete Dart puro (isar, vector_math, pdf)
+    │   ├── lib/
+    │   │   ├── room_scanner_core.dart   # barrel
+    │   │   └── src/
+    │   │       ├── models/       # RoomModel, IsarProject, IsarRoom
+    │   │       ├── geometry/     # GeometryService, SharedWallService
+    │   │       ├── persistence/  # LocalDatabaseService
+    │   │       ├── export/       # PlanExportBuilder (JSON/SVG/PDF)
+    │   │       └── utils/        # MeasurementUnits, ScanValidator
+    │   └── test/
+    │
+    └── room_scanner_app/
+        ├── pubspec.yaml          # depende de room_scanner_core (path/git)
+        ├── l10n.yaml
+        ├── android/  ios/  assets/  integration_test/
+        ├── lib/
+        │   ├── config/            # Configuración por entorno (Supabase)
+        │   ├── l10n/              # Recursos de localización
+        │   ├── providers/         # Estado y persistencia coordinada
+        │   ├── scanner/
+        │   │   ├── adapters/      # Adaptadores AR y cámara básica
+        │   │   ├── engine/        # Resolución y ejecución del modo de escaneo
+        │   │   ├── models/        # Estado y puntos del scanner
+        │   │   ├── services/      # Capacidades, permisos y sensores
+        │   │   └── utils/         # Estabilización de puntos AR
+        │   ├── screens/           # Pantallas de la aplicación
+        │   ├── services/          # Auth, sync, permisos, wrapper de import/export
+        │   └── main.dart          # Inicialización y composición principal
+        └── test/
 ```
 
 ### Componentes principales
 
-| Componente | Responsabilidad |
-|---|---|
-| `DeviceCapabilitiesService` | Detectar cámara, ARCore y ARKit |
-| `ArCheckService` | Abrir el mejor escáner compatible |
-| `ScannerProvider` | Estado del relevamiento activo |
-| `FloorPlanProvider` | Proyecto abierto, edición y transformaciones |
-| `ProjectProvider` | Persistencia local y sincronización |
-| `SharedWallService` | Detectar tramos compartidos entre ambientes |
-| `GeometryService` | Área, perímetro y operaciones geométricas |
-| `ImportExportService` | JSON, PDF, impresión y uso compartido |
+| Componente | Paquete | Responsabilidad |
+|---|---|---|
+| `DeviceCapabilitiesService` | app | Detectar cámara, ARCore y ARKit |
+| `ArCheckService` | app | Abrir el mejor escáner compatible |
+| `ScannerProvider` | app | Estado del relevamiento activo |
+| `FloorPlanProvider` | app | Proyecto abierto, edición y transformaciones |
+| `ProjectProvider` | app | Persistencia local y sincronización |
+| `ImportExportService` | app | I/O: selector de archivos, compartir e imprimir |
+| `SharedWallService` | core | Detectar tramos compartidos entre ambientes |
+| `GeometryService` | core | Área, perímetro y operaciones geométricas |
+| `LocalDatabaseService` | core | Lectura/escritura de proyectos en Isar |
+| `PlanExportBuilder` | core | Construcción pura de JSON, SVG del plano y documento PDF |
 
 ## Tecnologías
 
@@ -229,6 +256,7 @@ lib/
 
 - Flutter 3.27.0, utilizado por los workflows actuales.
 - Dart `>=3.0.0 <4.0.0`.
+- [Melos](https://melos.invertase.dev/) para orquestar el workspace de dos paquetes (`dart pub global activate melos`).
 - Java 17.
 - CocoaPods para compilar iOS.
 - Un proyecto Supabase para autenticación y sincronización.
@@ -258,22 +286,29 @@ git clone https://github.com/BetOarg/Claude-Room-Scanner.git
 cd Claude-Room-Scanner
 ```
 
-### 2. Instalar dependencias
+### 2. Instalar Melos y hacer bootstrap del workspace
 
 ```bash
-flutter pub get
+dart pub global activate melos
+melos bootstrap
 ```
 
-### 3. Generar localizaciones
+`melos bootstrap` resuelve las dependencias de `room_scanner_core` y `room_scanner_app` (incluida la dependencia `path:` entre ambos) en un solo paso. También podés operar cada paquete por separado con `dart pub get` / `flutter pub get` en su propia carpeta.
+
+### 3. Generar el código de `room_scanner_core` (modelos Isar)
 
 ```bash
-flutter gen-l10n
-```
-
-### 4. Generar modelos de Isar
-
-```bash
+cd packages/room_scanner_core
 dart run build_runner build --delete-conflicting-outputs
+cd ../..
+```
+
+### 4. Generar las localizaciones de `room_scanner_app`
+
+```bash
+cd packages/room_scanner_app
+flutter gen-l10n
+cd ../..
 ```
 
 ### 5. Configurar Supabase
@@ -281,6 +316,7 @@ dart run build_runner build --delete-conflicting-outputs
 La aplicación lee la configuración mediante `--dart-define`. No guardes credenciales privadas en el repositorio.
 
 ```bash
+cd packages/room_scanner_app
 flutter run \
   --dart-define=SUPABASE_URL=https://tu-proyecto.supabase.co \
   --dart-define=SUPABASE_ANON_KEY=tu-anon-key
@@ -290,32 +326,39 @@ Sin valores reales, la aplicación puede inicializarse con los placeholders incl
 
 ## Verificación
 
-### Análisis estático
+Los comandos de análisis y pruebas se ejecutan **por paquete** (o con Melos, sobre todos a la vez).
+
+### `room_scanner_core` (Dart puro)
 
 ```bash
-flutter analyze --no-fatal-infos --no-fatal-warnings
+cd packages/room_scanner_core
+dart analyze --fatal-infos
+dart test
 ```
 
-### Pruebas
+Cubre, entre otros casos: conversión de unidades, detección de paredes compartidas completas y parciales, y estructura y contenido de las exportaciones JSON/PDF (`PlanExportBuilder`).
+
+### `room_scanner_app` (Flutter)
 
 ```bash
+cd packages/room_scanner_app
+flutter analyze --no-fatal-infos --no-fatal-warnings
 flutter test
 ```
 
-La suite cubre, entre otros casos:
+Cubre, entre otros casos: persistencia de opciones de puertas y ventanas, compatibilidad con aberturas antiguas, edición geométrica y prevención de superposiciones, transformación, alineación, deshacer y rehacer, y rechazo de alineaciones que invaden otro ambiente.
 
-- Conversión de unidades y preferencias.
-- Persistencia de opciones de puertas y ventanas.
-- Compatibilidad con aberturas antiguas.
-- Edición geométrica y prevención de superposiciones.
-- Transformación, alineación, deshacer y rehacer.
-- Rechazo de alineaciones que invaden otro ambiente.
-- Detección de paredes compartidas completas y parciales.
-- Estructura y contenido de exportaciones.
+### Todos los paquetes con Melos
+
+```bash
+melos run analyze
+melos run test
+```
 
 ### Prueba de integración
 
 ```bash
+cd packages/room_scanner_app
 flutter test integration_test/app_test.dart
 ```
 
@@ -324,6 +367,7 @@ flutter test integration_test/app_test.dart
 ### Android
 
 ```bash
+cd packages/room_scanner_app
 flutter build apk --debug \
   --dart-define=SUPABASE_URL=https://tu-proyecto.supabase.co \
   --dart-define=SUPABASE_ANON_KEY=tu-anon-key
@@ -332,6 +376,7 @@ flutter build apk --debug \
 ### iOS sin firma
 
 ```bash
+cd packages/room_scanner_app
 flutter build ios --no-codesign --debug \
   --dart-define=SUPABASE_URL=https://tu-proyecto.supabase.co \
   --dart-define=SUPABASE_ANON_KEY=tu-anon-key
@@ -339,24 +384,28 @@ flutter build ios --no-codesign --debug \
 
 ## Integración continua
 
-El workflow `.github/workflows/ci.yml` se ejecuta en cada `push` y `pull_request` sobre `main` o `master`.
+El workflow `.github/workflows/ci.yml` se ejecuta en cada `push` y `pull_request` sobre `main` o `master`, con tres jobs:
 
-### Android
+### `test-core`
+
+1. Configura el SDK de Dart (no necesita Android/iOS: `room_scanner_core` es Dart puro).
+2. Genera el código de Isar con `build_runner`.
+3. Analiza y prueba `room_scanner_core`.
+
+### `check-android` (depende de `test-core`)
 
 1. Configura Java 17 y Flutter 3.27.0.
-2. Instala dependencias.
-3. Genera localizaciones e Isar.
-4. Ejecuta el análisis estático.
-5. Ejecuta las pruebas.
-6. Compila un APK de depuración.
+2. Genera el código de Isar en `room_scanner_core` y obtiene las dependencias de `room_scanner_app`.
+3. Genera las localizaciones.
+4. Ejecuta el análisis estático y las pruebas de `room_scanner_app`.
+5. Compila un APK de depuración.
 
-### iOS
+### `check-ios` (depende de `test-core`)
 
 1. Configura Flutter 3.27.0 en macOS.
-2. Instala dependencias.
-3. Genera localizaciones e Isar.
-4. Verifica CocoaPods y la configuración iOS.
-5. Ejecuta una compilación de configuración sin firma.
+2. Genera el código de Isar en `room_scanner_core` y obtiene las dependencias de `room_scanner_app`.
+3. Genera las localizaciones.
+4. Verifica CocoaPods y la configuración iOS con una compilación sin firma.
 
 El workflow manual `.github/workflows/build_apk.yml` genera un APK de prueba versionado, verifica su firma y lo publica como artefacto temporal de GitHub Actions.
 
@@ -390,10 +439,11 @@ La disponibilidad de una capacidad se comprueba en tiempo de ejecución y los fa
 Antes de proponer un cambio:
 
 1. Conservá la compatibilidad con proyectos guardados anteriormente.
-2. No cambies el orden de enumeraciones persistidas por Isar.
-3. Agregá pruebas para conversiones, geometría o persistencia afectadas.
-4. Ejecutá generación de localizaciones y modelos.
-5. Confirmá Android e iOS en verde.
+2. No cambies el orden de enumeraciones persistidas por Isar (`IsarRoomType`, `IsarFeatureType`, `IsarDoorHingeSide`, `IsarDoorSwingSide`, `IsarDoorOpeningDirection`, en `packages/room_scanner_core`).
+3. Si el cambio es de dominio, geometría o exportación, va en `packages/room_scanner_core`; si es de UI, providers, i18n o hardware, va en `packages/room_scanner_app`.
+4. Agregá pruebas para conversiones, geometría o persistencia afectadas, en el paquete que corresponda.
+5. Ejecutá `melos run build-runner`, `melos run gen-l10n`, `melos run analyze` y `melos run test`.
+6. Confirmá Android e iOS en verde.
 
 ## Licencia
 

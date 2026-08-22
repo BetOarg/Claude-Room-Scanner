@@ -15,8 +15,36 @@ permissions:
   contents: read
 
 jobs:
+  test-core:
+    name: room_scanner_core — analyze & test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Dart
+        uses: dart-lang/setup-dart@v1
+
+      - name: Get dependencies
+        run: dart pub get
+        working-directory: packages/room_scanner_core
+
+      - name: Generate Isar / Build Runner code
+        run: dart run build_runner build --delete-conflicting-outputs
+        working-directory: packages/room_scanner_core
+
+      - name: Analyze code
+        run: dart analyze --fatal-infos
+        working-directory: packages/room_scanner_core
+
+      - name: Run tests
+        run: dart test
+        working-directory: packages/room_scanner_core
+
   check-android:
     name: Verify Code, Tests & Android
+    needs: test-core
     runs-on: ubuntu-latest
 
     steps:
@@ -74,31 +102,39 @@ jobs:
           flutter --version
           flutter doctor -v
 
-      - name: Get dependencies
+      - name: Generate Isar / Build Runner code (room_scanner_core)
+        run: |
+          dart pub get
+          dart run build_runner build --delete-conflicting-outputs
+        working-directory: packages/room_scanner_core
+
+      - name: Get dependencies (room_scanner_app)
         run: flutter pub get
+        working-directory: packages/room_scanner_app
 
       - name: Generate Flutter localizations
         run: flutter gen-l10n
-
-      - name: Generate Isar / Build Runner code
-        run: dart run build_runner build --delete-conflicting-outputs
+        working-directory: packages/room_scanner_app
 
       - name: Analyze code
         run: flutter analyze --no-fatal-infos --no-fatal-warnings
+        working-directory: packages/room_scanner_app
 
       - name: Run tests
         run: flutter test
+        working-directory: packages/room_scanner_app
 
       - name: Verify Android Build
+        working-directory: packages/room_scanner_app
         run: |
           flutter clean
           flutter pub get
           flutter gen-l10n
-          dart run build_runner build --delete-conflicting-outputs
           flutter build apk --debug
 
   check-ios:
     name: Verify iOS Build
+    needs: test-core
     runs-on: macos-latest
 
     steps:
@@ -112,19 +148,24 @@ jobs:
           channel: "stable"
           cache: true
 
-      - name: Get dependencies
+      - name: Generate Isar / Build Runner code (room_scanner_core)
+        run: |
+          dart pub get
+          dart run build_runner build --delete-conflicting-outputs
+        working-directory: packages/room_scanner_core
+
+      - name: Get dependencies (room_scanner_app)
         run: flutter pub get
+        working-directory: packages/room_scanner_app
 
       - name: Generate Flutter localizations
         run: flutter gen-l10n
-
-      - name: Generate Isar / Build Runner code
-        run: dart run build_runner build --delete-conflicting-outputs
+        working-directory: packages/room_scanner_app
 
       - name: Verify iOS Configuration & Pods
+        working-directory: packages/room_scanner_app
         run: |
           flutter clean
           flutter pub get
           flutter gen-l10n
-          dart run build_runner build --delete-conflicting-outputs
           flutter build ios --config-only --no-codesign --debug

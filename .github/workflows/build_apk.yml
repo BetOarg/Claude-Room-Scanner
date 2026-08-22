@@ -42,13 +42,18 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Install dependencies
-        run: flutter pub get
+      - name: Generate Isar database models (room_scanner_core)
+        run: |
+          dart pub get
+          dart run build_runner build --delete-conflicting-outputs
+        working-directory: packages/room_scanner_core
 
-      - name: Generate Isar database models
-        run: dart run build_runner build --delete-conflicting-outputs
+      - name: Install dependencies (room_scanner_app)
+        run: flutter pub get
+        working-directory: packages/room_scanner_app
 
       - name: Build versioned APK
+        working-directory: packages/room_scanner_app
         run: |
           VERSION_CODE="$(date -u +%y%m%d%H)"
 
@@ -71,5 +76,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Mi-App-Android-${{ github.run_number }}
-          path: build/app/outputs/flutter-apk/room-scanner-build-${{ github.run_number }}.apk
+          path: packages/room_scanner_app/build/app/outputs/flutter-apk/room-scanner-build-${{ github.run_number }}.apk
           retention-days: 14

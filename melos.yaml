@@ -1,0 +1,40 @@
+name: claude_room_scanner
+
+packages:
+  - packages/**
+
+command:
+  bootstrap:
+    usePubspecOverrides: true
+
+scripts:
+  analyze:
+    exec: dart analyze --fatal-infos
+    description: Analiza cada paquete con el analizador de Dart/Flutter.
+    packageFilters:
+      dirExists: lib
+
+  test:
+    exec: dart test
+    description: >
+      Corre los tests de cada paquete. En room_scanner_app, "dart test"
+      delega automáticamente a "flutter test" porque el paquete depende
+      del SDK de Flutter.
+    packageFilters:
+      dirExists: test
+
+  build-runner:
+    run: dart run build_runner build --delete-conflicting-outputs
+    description: Genera el código de Isar en room_scanner_core.
+    packageFilters:
+      scope: room_scanner_core
+
+  gen-l10n:
+    run: flutter gen-l10n
+    description: Genera las clases de localización de room_scanner_app.
+    packageFilters:
+      scope: room_scanner_app
+
+  format:
+    exec: dart format --set-exit-if-changed .
+    description: Verifica el formato en todos los paquetes.

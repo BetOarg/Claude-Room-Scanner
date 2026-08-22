@@ -1,0 +1,38 @@
+name: room_scanner_core
+description: >
+  Núcleo de dominio de Claude Room Scanner: modelos Isar, geometría de
+  ambientes/paredes compartidas y construcción de exportaciones JSON/PDF.
+  Sin UI, sin widgets, sin controladores de hardware.
+publish_to: 'none'
+version: 1.0.0
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+  # Sin "flutter:" — es un paquete Dart puro. Ninguna dependencia de acá
+  # requiere el SDK de Flutter para compilar.
+
+dependencies:
+  # Base de datos local NoSQL. Solo se declara el paquete de anotaciones y
+  # runtime; los binarios nativos (isar_flutter_libs) quedan del lado de
+  # room_scanner_app, que es quien tiene proyectos android/ios.
+  isar: ^3.1.0+1
+
+  # Matemáticas vectoriales para los puntos 3D del plano.
+  vector_math: ^2.1.4
+
+  # Generación de documentos PDF — paquete Dart puro, sin dependencia de
+  # Flutter. La impresión/guardado real (package:printing) queda en la app.
+  pdf: ^3.10.8
+
+dev_dependencies:
+  test: ^1.25.0
+  lints: ^3.0.0
+
+  # Generador de código para los modelos Isar.
+  build_runner: ^2.4.8
+  isar_generator: ^3.1.0+1
+
+  # SOLO dev_dependency: habilita abrir una instancia real de Isar en tests
+  # locales de integración de este paquete (no es necesaria para compilar
+  # ni para que room_scanner_app funcione).
+  isar_flutter_libs: ^3.1.0+1
