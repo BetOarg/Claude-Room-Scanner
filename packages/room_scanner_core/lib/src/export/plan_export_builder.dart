@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:pdf/widgets.dart' as pw;
 
 import '../models/room_model.dart';
+import '../services/geometry_service.dart'; // <-- Añadir esta importación (ajusta la ruta según la estructura de carpetas)
 import '../utils/measurement_units.dart';
 
 /// Construye los datos y documentos de exportación/importación del plano
